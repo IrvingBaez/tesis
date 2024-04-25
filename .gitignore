@@ -1,0 +1,30 @@
+# Created during development
+.ipynb_checkpoints
+.vscode
+
+# Downloadable model
+*.pth
+
+# Program output
+*.csv
+*.pckl
+*.out
+
+# Video files
+*.mp4
+*.mkv
+*.webm
+*.avi
+
+# Audio files
+*.wav
+
+# Image files
+*.jpg
+
+# Not part of the project
+*.ipynb
+protocolo/
+
+__pycache__/
+*.py[cod]
