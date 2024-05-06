@@ -4,7 +4,7 @@
 #SBATCH --nodes=1														#number of nodes requested
 #SBATCH --gpus=4														#number of gpus requested
 #SBATCH --partition=gpu											#queue
-#SBATCH --mail-user="irvingbaezc@gmail.com”	#email for reporting
+#SBATCH --mail-user="irvingbaezc@gmail.com"	#email for reporting
 #SBATCH --mail-type=ALL 										#report types
 
 module purge
