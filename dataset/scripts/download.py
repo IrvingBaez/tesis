@@ -8,7 +8,7 @@ def main():
 		'test': 	'11YWpZGM7XSwYtqWeg-DzhxFANYwsY3qo&confirm=t',
 	}
 
-	for dataset in ['train', 'val', 'test'][:1]:
+	for dataset in ['train', 'val', 'test']:
 		zip_path = f'dataset/{dataset}.zip'
 
 		gdown.download(id=ids[dataset], output=zip_path)
