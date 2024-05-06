@@ -42,14 +42,14 @@ CONFIG = {
 
 
 def predict(args):
-	# rmtree(args.save_path)
-	# os.makedirs(args.save_path)
-	# os.makedirs(f'{args.save_path}/features')
-	# os.makedirs(f'{args.save_path}/predictions')
+	rmtree(args.save_path)
+	os.makedirs(args.save_path)
+	os.makedirs(f'{args.save_path}/features')
+	os.makedirs(f'{args.save_path}/predictions')
 
 	model = load_model()
 
-	# extract_features(model, args)
+	extract_features(model, args)
 	cluster_features(model, args)
 
 

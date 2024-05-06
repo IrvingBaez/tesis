@@ -123,7 +123,7 @@ class CustomDataset(Dataset):
 	# TODO: this function does too much stuff.
 	def load_dataset(self):
 		videos	= glob.glob(f'{self.data_path}/videos/*.*')
-		waves_path = f'{self.data_path}/waves'
+		waves_path = f'{self.data_path}/denoised_waves'
 		vad_path = f'{self.data_path}/labs'
 
 		maxs = self._max_frames / 100.0

@@ -19,6 +19,7 @@ def get_detector(args):
 		return
 
 
+# TODO: Generate lab files.
 def perform_asd(args):
 	os.makedirs(args.csv_path, exist_ok = True)
 	os.makedirs(args.score_path, exist_ok = True)
