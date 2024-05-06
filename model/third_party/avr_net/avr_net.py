@@ -1,0 +1,81 @@
+import torch
+import torch.nn as nn
+import pytorch_lightning as pl
+
+from model.third_party.avr_net.models.relation_layer import RelationLayer
+from model.third_party.avr_net.models.audio_encoder import AudioEncoder
+from model.third_party.avr_net.models.video_encoder import VideoEncoder
+
+
+class AVRNET(pl.LightningModule):
+	def __init__(self, config):
+		super().__init__()
+		self.config = config
+
+
+	def build(self):
+		self.audio_encoder	= AudioEncoder(self.config['audio'])
+		self.video_encoder	= VideoEncoder(self.config['video'])
+		self.relation_layer	= RelationLayer(self.config['relation'])
+
+		ckpt_state_dict = torch.load(self.config['checkpoint'])['model_state_dict']
+		self.load_state_dict(ckpt_state_dict, strict=True)
+
+
+	def train(self, mode=True):
+		super().train(mode)
+		if self.config['audio']['fix_layers']:
+			for module in self.audio_encoder.modules():
+				if isinstance(module, nn.BatchNorm2d):
+					module.eval()
+					module.weight.requires_grad = False
+					module.bias.requires_grad = False
+
+		if self.config['video']['fix_layers']:
+			for module in self.video_encoder.modules():
+				if isinstance(module, nn.BatchNorm2d):
+					module.eval()
+					module.weight.requires_grad = False
+					module.bias.requires_grad = False
+
+
+	# TODO: This is terrible code, `forward` should't manage or split like this.
+	def forward(self, batch, exec=None):
+		# if batch['dataset_type'] == 'train':
+		# 	return self._forward_train(batch)
+		# else:
+		return self._forward_predict(batch, exec)
+
+
+	def _forward_train(self, batch):
+		feat_audio = self.audio_encoder(batch)
+		feat_video = self.video_encoder(batch)
+
+		targets = batch.targets
+		visible = torch.tensor(batch.meta.visible, dtype=torch.int64, device=targets.device)
+
+		scores, targets = self.relation_layer(feat_video, feat_audio, visible, targets)
+
+		return {'scores': scores, 'targets': targets}
+
+
+	def _forward_predict(self, batch, exec):
+		output = {}
+
+		if exec == 'extraction':
+			feat_audio = self.audio_encoder(batch)
+			feat_video = self.video_encoder(batch)
+
+			output['feat_audio']	= feat_audio
+			output['feat_video']	= feat_video
+			# TODO: Collator should take care of data shape
+			output['video']				= batch['meta']['video']
+			output['start']				= batch['meta']['start']
+			output['end']					= batch['meta']['end']
+			output['trackid']			= batch['meta']['trackid']
+			output['visible']			= batch['meta']['visible']
+			output['losses']			= {}
+		elif exec == 'relation':
+			output['scores']			= self.relation_layer.predict(batch['video'], batch['audio'], batch['task_full'])
+
+		return output

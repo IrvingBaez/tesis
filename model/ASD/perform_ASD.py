@@ -1,55 +1,100 @@
 import glob, argparse, os
 from tqdm import tqdm
 from shutil import rmtree
+from model.util import argparse_helper
 
-def parse_arguments():
+from model.third_party.Light_ASD import predict as light_asd_predict
+import ground_truth_detector
+import score_ASD
+import visualize_ASD
+
+
+def get_detector(args):
+	if args.system == 'ground_truth':
+		return ground_truth_detector
+	if args.system == 'light_asd':
+		return light_asd_predict
+	if args.system == 'talk_net':
+		# TODO: Implement TalkNet
+		return
+
+
+def perform_asd(args):
+	os.makedirs(args.csv_path, exist_ok = True)
+	os.makedirs(args.score_path, exist_ok = True)
+	os.makedirs(args.visualization_path, exist_ok = True)
+
+	speaker_detector = get_detector(args)
+
+	for video in tqdm(args.videos, desc=f'Performing ASD with {args.system}'):
+		video_name = video.split('/')[-1].split('.')[0]
+		gt_path = f'{args.gt_path}/{video_name}.csv'
+		pred_path=f'{args.csv_path}/{video_name}.csv'
+		save_path=f'{args.score_path}/{video_name}.out'
+		visualization_path=f'{args.visualization_path}/{video_name}.avi'
+
+		speaker_detector.main(video_folder=args.videos_path, video_name=video_name, csv_path=args.csv_path, verbose=args.verbose)
+		if os.path.exists(video.split('.')[0]):
+			rmtree(video.split('.')[0])
+
+		if os.path.exists(gt_path):
+			score_ASD.main(gt_path=gt_path, pred_path=pred_path, verbose=args.verbose, save_path=save_path)
+
+		if args.visualize:
+			visualize_ASD.main(video_path=video, csv_path=pred_path, gt_path=gt_path, output_path=visualization_path)
+
+	get_total_asd_score(args)
+
+
+def get_total_asd_score(args):
+	scores_path = f'{args.data_path}/asd/f{args.system}/scores'
+	score_files = glob(f'{scores_path}/*.*')
+
+	mAPs = []
+	F1s = []
+
+	for score_file in score_files:
+		with open(score_file, 'r') as file:
+			lines = file.readlines()
+
+			mAPs.append(float(lines[-2].split('\t')[-1]))
+			F1s.append(float(lines[-1].split('\t')[-1]))
+
+	avg_mAP = sum(mAPs) / len(mAPs)
+	avg_F1 = sum(F1s) / len(F1s)
+
+	with open(f'{scores_path}/__total_score.out', 'w') as file:
+		file.write(f'Average mAP:\t{avg_mAP:0.4f}')
+		file.write(f'Average F1:\t{avg_F1:0.4f}')
+
+
+def initialize_arguments(**kwargs):
 	parser = argparse.ArgumentParser(description = "Arguments for Active Speaker Detection")
 
-	parser.add_argument('-dp', '--dataPath', dest='data_path',  type=str, default="dataset/train", help='Location of dataset to process')
-	parser.add_argument('-s', '--system',  dest='system', type=str, default='light_asd', help='System to use for Active Speaker Detection', choices=['ground_truth', 'light_asd'])
-	parser.add_argument('--verbose', action='store_true', help='Print progress and process')
-	parser.add_argument('--visualize', action='store_true', help='Make video to visualize AVD predictions vs ground truth')
+	parser.add_argument('--data_path',	type=str, default="dataset/val", help='Location of dataset to process')
+	parser.add_argument('--system',  		type=str, default='light_asd', help='System to use for Active Speaker Detection', choices=['ground_truth', 'light_asd', 'talk_net'])
+	parser.add_argument('--verbose', 		action='store_true', help='Print progress and process')
+	parser.add_argument('--visualize', 	action='store_true', help='Make video to visualize AVD predictions vs ground truth')
 
-	args = parser.parse_args()
+	args = argparse_helper(parser, **kwargs)
 
-	args.videos = glob.glob(args.data_path + '/videos/*.*')
+	args.videos_path = f'{args.data_path}/videos'
+	args.gt_path = f'{args.data_path}/asd/ground_truth/predictions'
+
+	args.csv_path = f'{args.data_path}/asd/{args.system}/predictions'
+	args.score_path = f'{args.data_path}/asd/{args.system}/scores'
+	args.visualization_path = f'{args.data_path}/asd/{args.system}/visualization'
+
+	args.videos = glob.glob(f'{args.videos_path}/*.*')
 
 	return args
 
 
-# TODO: Implement TalkNet
-def perform_asd(args, model):
-	if model == 'ground_truth':
-		return
-	if model == 'light_asd':
-		light_asd(args)
+def main(**kwargs):
+	args = initialize_arguments(**kwargs, not_empty=True)
+	perform_asd(args)
 
 
-def light_asd(args):
-	csvPath = f'{args.data_path}/ASD_predictions'
-	scorePath = f'{args.data_path}/ASD_scores'
-	gtPath = f'{args.data_path}/tracks'
-	verbose_flag = '--verbose' if args.verbose else ''
-
-	os.makedirs(csvPath, exist_ok = True)
-	os.makedirs(scorePath, exist_ok = True)
-
-	for video in tqdm(args.videos, desc=f'Performing ASD with light_asd', disable=not args.verbose):
-		video_name = video.split('/')[-1].split('.')[0]
-		ground_truth_exists = os.path.exists(f'{gtPath}/{video_name}.csv')
-
-		os.system(f"python3 third_party/Light_ASD/predict.py {verbose_flag}  --videoFolder='{args.data_path}/videos' --videoName='{video_name}' --csvPath='{csvPath}'")
-		rmtree(f'{args.data_path}/videos/{video_name}')
-
-		if ground_truth_exists:
-			os.system(f"python3 model/score_ASD.py -gt {gtPath}/{video_name}.csv -pr {csvPath}/{video_name}.csv --verbose > {scorePath}/{video_name}.out")
-
-		if args.visualize:
-			gt_argument = f" -gtp {gtPath}/{video_name}.csv" if ground_truth_exists else ''
-			os.system(f"python3 model/visualize_ASD.py -vp {video} -cp {csvPath}/{video_name}.csv {gt_argument}")
-
-
-if __name__ == "__main__":
-	args = parse_arguments()
-
-	perform_asd(args, args.system)
+if __name__ == '__main__':
+	args = initialize_arguments()
+	perform_asd(args)

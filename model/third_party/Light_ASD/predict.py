@@ -1,13 +1,16 @@
 import time, sys, os, torch, argparse, glob, subprocess, warnings, cv2, pickle, numpy, math, python_speech_features
 
+from math import floor
 from tqdm import tqdm
 from scipy import signal
 from shutil import rmtree
 from scipy.io import wavfile
 from scipy.interpolate import interp1d
 from scenedetect import open_video, SceneManager, ContentDetector, StatsManager
-from model.faceDetector.s3fd import S3FD
-from ASD import ASD
+
+from model.util import argparse_helper
+from .model.faceDetector.s3fd import S3FD
+from .ASD import ASD
 
 warnings.filterwarnings("ignore")
 
@@ -43,7 +46,7 @@ def inference_video(args):
 		image = cv2.imread(frame)
 		imageNumpy = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-		bboxes = detector.detect_faces(imageNumpy, conf_th=0.9, scales=[args.facedetScale])
+		bboxes = detector.detect_faces(imageNumpy, conf_th=0.9, scales=[args.face_det_scale])
 		dets.append([])
 		for bbox in bboxes:
 			dets[-1].append({'frame':index, 'bbox':(bbox[:-1]).tolist(), 'conf':bbox[-1]}) # dets has the frames info, bbox info, conf info
@@ -82,7 +85,7 @@ def track_shot(args, sceneFaces):
 				if track == []:
 					track.append(face)
 					frameFaces.remove(face)
-				elif face['frame'] - track[-1]['frame'] <= args.numFailedDet:
+				elif face['frame'] - track[-1]['frame'] <= args.num_failed_det:
 					iou = bb_intersection_over_union(face['bbox'], track[-1]['bbox'])
 					if iou > iouThres:
 						track.append(face)
@@ -93,7 +96,7 @@ def track_shot(args, sceneFaces):
 		if track == []:
 			break
 
-		if len(track) > args.minTrack:
+		if len(track) > args.min_track:
 			frameNum    = numpy.array([face['frame'] for face in track])
 			bboxes      = numpy.array([numpy.array(face['bbox']) for face in track])
 			frameI      = numpy.arange(frameNum[0], frameNum[-1]+1)
@@ -104,7 +107,7 @@ def track_shot(args, sceneFaces):
 				bboxesI.append(interpfn(frameI))
 
 			bboxesI  = numpy.stack(bboxesI, axis=1)
-			if max(numpy.mean(bboxesI[:,2]-bboxesI[:,0]), numpy.mean(bboxesI[:,3]-bboxesI[:,1])) > args.minFaceSize:
+			if max(numpy.mean(bboxesI[:,2]-bboxesI[:,0]), numpy.mean(bboxesI[:,3]-bboxesI[:,1])) > args.min_face_size:
 				tracks.append({'frame':frameI,'bbox':bboxesI})
 
 	return tracks
@@ -128,7 +131,7 @@ def crop_video(args, track, cropFile):
 	detections['y'] = signal.medfilt(detections['y'], kernel_size=13)
 
 	for frame_index, frame in enumerate(track['frame']):
-		crop_scale  = args.cropScale
+		crop_scale  = args.crop_scale
 		box_size  = detections['s'][frame_index]   # Detection box size
 		box_padding = int(box_size * (1 + 2 * crop_scale))  # Pad videos by this amount
 
@@ -151,12 +154,12 @@ def crop_video(args, track, cropFile):
 	audioEnd    = (track['frame'][-1]+1) / args.fps
 	vOut.release()
 
-	command = f"ffmpeg -y -i {args.audioFilePath} -async 1 -ac 1 -vn -acodec pcm_s16le -ar 16000 -threads {args.nDataLoaderThread} -ss {audioStart} -to {audioEnd} {audioTmp} -loglevel panic"
+	command = f"ffmpeg -y -i {args.audioFilePath} -async 1 -ac 1 -vn -acodec pcm_s16le -ar 16000 -threads {args.num_loader_treads} -ss {audioStart} -to {audioEnd} {audioTmp} -loglevel panic"
 	subprocess.call(command, shell=True, stdout=None)
 
 	_, audio = wavfile.read(audioTmp)
 	command = ("ffmpeg -y -i %st.avi -i %s -threads %d -c:v copy -c:a copy %s.avi -loglevel panic" % \
-				(cropFile, audioTmp, args.nDataLoaderThread, cropFile)) # Combine audio and video file
+				(cropFile, audioTmp, args.num_loader_treads, cropFile)) # Combine audio and video file
 	subprocess.call(command, shell=True, stdout=None)
 	os.remove(cropFile + 't.avi')
 
@@ -166,8 +169,8 @@ def crop_video(args, track, cropFile):
 def evaluate_network(files, args):
 	# GPU: active speaker detection by pretrained model
 	detector = ASD()
-	detector.loadParameters(args.pretrainModel)
-	# print(f"Model {args.pretrainModel} loaded from previous state!")
+	detector.loadParameters(args.pretrained_model)
+	# print(f"Model {args.pretrained_model} loaded from previous state!")
 	detector.eval()
 	allScores = []
 
@@ -194,7 +197,8 @@ def evaluate_network(files, args):
 		video.release()
 
 		videoFeature = numpy.array(videoFeature)
-		length = min((audioFeature.shape[0] - audioFeature.shape[0] % 4) / 100, videoFeature.shape[0])
+		length = 4 * min(floor(audioFeature.shape[0] / 4), videoFeature.shape[0]) / 100
+		# length = min((audioFeature.shape[0] - audioFeature.shape[0] % 4) / 100, videoFeature.shape[0])
 		audioFeature = audioFeature[:int(round(length * 100)),:]
 		videoFeature = videoFeature[:int(round(length * 25)),:,:]
 		allScore = [] # Evaluation use model
@@ -255,17 +259,17 @@ def visualization(tracks, scores, args):
 
 	command = ("ffmpeg -y -i %s -i %s -threads %d -c:v copy -c:a copy %s -loglevel panic" % \
 		(os.path.join(args.pyaviPath, 'video_only.avi'), os.path.join(args.pyaviPath, 'audio.wav'), \
-		args.nDataLoaderThread, os.path.join(args.pyaviPath,'video_out.avi')))
+		args.num_loader_treads, os.path.join(args.pyaviPath,'video_out.avi')))
 	subprocess.call(command, shell=True, stdout=None)
 
 
 def build_csv(tracks, scores, args):
-	os.makedirs(args.csvPath, exist_ok = True)
+	os.makedirs(args.csv_path, exist_ok = True)
 	video = cv2.VideoCapture(f'{args.pyaviPath}/video.avi')
 	height = video.get(cv2.CAP_PROP_FRAME_HEIGHT)
 	width = video.get(cv2.CAP_PROP_FRAME_WIDTH)
 
-	file_id = '_'.join(args.videoName.split('_')[:-1])
+	file_id = '_'.join(args.video_name.split('_')[:-1])
 
 	lines = []
 	entity_ids = []
@@ -299,55 +303,9 @@ def build_csv(tracks, scores, args):
 
 			lines.append(','.join(map(str, line)) + '\n')
 
-	with open(f'{args.csvPath}/{args.videoName}.csv', 'w') as csv:
+	with open(f'{args.csv_path}/{args.video_name}.csv', 'w') as csv:
 		for line in lines:
 			csv.write(line)
-
-
-def initialize_args():
-	parser = argparse.ArgumentParser(description = "Light ASD prediction")
-
-	parser.add_argument('--videoName',             type=str, default="col",   help='Demo video name')
-	parser.add_argument('--videoFolder',           type=str, default="colDataPath",  help='Path for inputs, tmps and outputs')
-	parser.add_argument('--pretrainModel',         type=str, default="third_party/Light_ASD/weight/pretrain_AVA_CVPR.model",   help='Path for the pretrained model')
-	parser.add_argument('--csvPath',             	 type=str, help='Path to create predictions file')
-	parser.add_argument('--verbose',               action='store_true', help='Print progress and process')
-	parser.add_argument('--visualize',             action='store_true', help='Create video with bounding boxes')
-
-	parser.add_argument('--nDataLoaderThread',     type=int,   default=10,   help='Number of workers')
-	parser.add_argument('--facedetScale',          type=float, default=0.25, help='Scale factor for face detection, the frames will be scale to 0.25 orig')
-	parser.add_argument('--minTrack',              type=int,   default=10,   help='Number of min frames for each shot')
-	parser.add_argument('--numFailedDet',          type=int,   default=10,   help='Number of missed detections allowed before tracking is stopped')
-	parser.add_argument('--minFaceSize',           type=int,   default=1,    help='Minimum face size in pixels')
-	parser.add_argument('--cropScale',             type=float, default=0.40, help='Scale bounding box')
-
-	parser.add_argument('--start',                 type=int, default=0,   help='The start time of the video')
-	parser.add_argument('--duration',              type=int, default=0,  help='The duration of the video, when set as 0, will extract the whole video')
-
-	args = parser.parse_args()
-
-	global verbose
-	verbose = args.verbose
-	global lines_out
-	lines_out = 0
-
-	args.videoPath 			= glob.glob(os.path.join(args.videoFolder, args.videoName + '.*'))[0]
-	args.savePath 			= os.path.join(args.videoFolder, args.videoName)
-	args.pyaviPath 			= os.path.join(args.savePath, 'pyavi')
-	args.pyframesPath 	= os.path.join(args.savePath, 'pyframes')
-	args.pyworkPath 		= os.path.join(args.savePath, 'pywork')
-	args.pycropPath 		= os.path.join(args.savePath, 'pycrop')
-	args.videoFilePath 	= os.path.join(args.pyaviPath, 'video.avi')
-	args.audioFilePath 	= os.path.join(args.pyaviPath, 'audio.wav')
-
-	cam = cv2.VideoCapture(args.videoPath)
-	args.fps = cam.get(cv2.CAP_PROP_FPS)
-
-
-	if args.csvPath == None:
-		args.csvPath = args.savePath + '/csv'
-
-	return args
 
 
 def report_save(data, path):
@@ -368,7 +326,7 @@ def save_pckl(path, data):
 		pickle.dump(data, file)
 
 
-def main():
+def predict(args):
 	# This preprocesstion is modified based on this [repository](https://github.com/joonson/syncnet_python).
 	# ```
 	# .
@@ -394,10 +352,6 @@ def main():
 	#     └── tracks.pckl (face tracking result)
 	# ```
 
-	# Initialization
-	# global args
-	args = initialize_args()
-
 	if os.path.exists(args.savePath):
 		rmtree(args.savePath)
 
@@ -407,22 +361,22 @@ def main():
 	os.makedirs(args.pycropPath, 		exist_ok = True) # Save the detected face clips (audio+video) in this process
 
 	# If duration did not set, extract the whole video, otherwise extract the video from 'args.start' to 'args.start + args.duration'
-	duration_args = '-ss {args.start} -to {args.start + args.duration}'
+	duration_args = f'-ss {args.start} -to {args.start + args.duration}'
 	if args.duration == 0:
 		duration_args = ''
 
 	# Extract video
-	command = f"ffmpeg -y -i {args.videoPath} -qscale:v 2 -threads {args.nDataLoaderThread} {duration_args} -async 1 -r {args.fps} {args.videoFilePath} -loglevel panic"
+	command = f"ffmpeg -y -i {args.videoPath} -qscale:v 2 -threads {args.num_loader_treads} {duration_args} -async 1 -r {args.fps} {args.videoFilePath} -loglevel panic"
 	subprocess.call(command, shell=True, stdout=None)
 	report_save('video', args.videoFilePath)
 
 	# Extract audio
-	command = f"ffmpeg -y -i {args.videoFilePath} -qscale:a 0 -ac 1 -vn -threads {args.nDataLoaderThread} -ar 16000 {args.audioFilePath} -loglevel panic"
+	command = f"ffmpeg -y -i {args.videoFilePath} -qscale:a 0 -ac 1 -vn -threads {args.num_loader_treads} -ar 16000 {args.audioFilePath} -loglevel panic"
 	subprocess.call(command, shell=True, stdout=None)
 	report_save('audio', args.audioFilePath)
 
 	# Extract the video frames
-	command = f"ffmpeg -y -i {args.videoFilePath} -qscale:v 2 -threads {args.nDataLoaderThread} -f image2 {args.pyframesPath}/%06d.jpg -loglevel panic"
+	command = f"ffmpeg -y -i {args.videoFilePath} -qscale:v 2 -threads {args.num_loader_treads} -f image2 {args.pyframesPath}/%06d.jpg -loglevel panic"
 	subprocess.call(command, shell=True, stdout=None)
 	report_save('frames', args.pyframesPath)
 
@@ -439,7 +393,7 @@ def main():
 	for shot in scene:
 		frame_count = shot[1].frame_num - shot[0].frame_num
 
-		if frame_count < args.minTrack:
+		if frame_count < args.min_track:
 			continue
 
 		allTracks.extend(track_shot(args, faces[shot[0].frame_num:shot[1].frame_num])) # 'frames' to present this tracks' timestep, 'bbox' presents the location of the faces
@@ -471,5 +425,58 @@ def main():
 	log('Rendering track csv')
 	build_csv(vidTracks, scores, args)
 
+
+def initialize_arguments(**kwargs):
+	parser = argparse.ArgumentParser(description = "Light ASD prediction")
+
+	parser.add_argument('--video_name',					type=str, default="col",   help='Demo video name')
+	parser.add_argument('--video_folder',				type=str, default="colDataPath",  help='Path for inputs, tmps and outputs')
+	parser.add_argument('--pretrained_model',		type=str, default="model/third_party/Light_ASD/weight/pretrain_AVA_CVPR.model",   help='Path for the pretrained model')
+	parser.add_argument('--csv_path',						type=str, help='Path to create predictions file')
+	parser.add_argument('--verbose',						action='store_true', help='Print progress and process')
+	parser.add_argument('--visualize',					action='store_true', help='Create video with bounding boxes')
+
+	parser.add_argument('--num_loader_treads',	type=int,   default=10,   help='Number of workers')
+	parser.add_argument('--face_det_scale',			type=float, default=0.25, help='Scale factor for face detection, the frames will be scale to 0.25 orig')
+	parser.add_argument('--min_track',					type=int,   default=10,   help='Number of min frames for each shot')
+	parser.add_argument('--num_failed_det',			type=int,   default=10,   help='Number of missed detections allowed before tracking is stopped')
+	parser.add_argument('--min_face_size',			type=int,   default=1,    help='Minimum face size in pixels')
+	parser.add_argument('--crop_scale',					type=float, default=0.40, help='Scale bounding box')
+
+	parser.add_argument('--start',							type=int, default=0,   help='The start time of the video')
+	parser.add_argument('--duration',						type=int, default=0,  help='The duration of the video, when set as 0, will extract the whole video')
+
+	args = argparse_helper(parser, **kwargs)
+
+	global verbose
+	verbose = args.verbose
+	global lines_out
+	lines_out = 0
+
+	args.videoPath 			= glob.glob(os.path.join(args.video_folder, args.video_name + '.*'))[0]
+	args.savePath 			= os.path.join(args.video_folder, args.video_name)
+	args.pyaviPath 			= os.path.join(args.savePath, 'pyavi')
+	args.pyframesPath 	= os.path.join(args.savePath, 'pyframes')
+	args.pyworkPath 		= os.path.join(args.savePath, 'pywork')
+	args.pycropPath 		= os.path.join(args.savePath, 'pycrop')
+	args.videoFilePath 	= os.path.join(args.pyaviPath, 'video.avi')
+	args.audioFilePath 	= os.path.join(args.pyaviPath, 'audio.wav')
+
+	cam = cv2.VideoCapture(args.videoPath)
+	args.fps = cam.get(cv2.CAP_PROP_FPS)
+	cam.release()
+
+	if args.csv_path == None:
+		args.csv_path = args.savePath + '/csv'
+
+	return args
+
+
+def main(**kwargs):
+	args = initialize_arguments(**kwargs, not_empty=True)
+	predict(args)
+
+
 if __name__ == '__main__':
-		main()
+	args = initialize_arguments()
+	predict(args)

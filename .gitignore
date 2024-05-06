@@ -4,6 +4,7 @@
 
 # Downloadable model
 *.pth
+*.ckpt
 
 # Program output
 *.csv
@@ -21,6 +22,10 @@
 
 # Image files
 *.jpg
+
+# Annotations
+*.rttm
+*.lab
 
 # Not part of the project
 *.ipynb

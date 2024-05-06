@@ -31,3 +31,20 @@ def intersection_over_union(boxA, boxB, relativeToBoxA=False):
 		iou = interArea / float(boxAArea + boxBArea - interArea)
 
 	return iou
+
+
+def argparse_helper(parser, **kwargs):
+	if kwargs:
+		args_list = []
+
+		for key, value in kwargs.items():
+			if key == 'not_empty': continue
+
+			args_list.append(f'--{key}')
+			if isinstance(value, str): args_list.append(value)
+	else:
+		args_list = None
+
+	args = parser.parse_args(args=args_list)
+
+	return args

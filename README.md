@@ -26,8 +26,8 @@ generate requirements.txt:
 Available to download:
 - videos
 - tracks
-- rttms -> Adapt timestamps
-- labs ? -> Adapt timestamps
+- rttms
+- labs
 
 For demo, run:
 `python3 model/ASD.py -dp demo --verbose --visualize`

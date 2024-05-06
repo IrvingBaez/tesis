@@ -1,6 +1,8 @@
-import cv2, argparse
+import cv2, argparse, os
 import pandas as pd
 from tqdm import tqdm
+
+from model.util import argparse_helper
 
 
 def visualization(args):
@@ -14,37 +16,28 @@ def visualization(args):
 	ground_truth = quantize_csv(args.gt_path, height, width, fps)
 
 	fourcc = cv2.VideoWriter_fourcc(*'XVID')
-	output = cv2.VideoWriter('ASD_visualization.avi', fourcc, fps, (width, height))
+	output = cv2.VideoWriter(args.output_path, fourcc, fps, (width, height))
 
 	frame_count = 0
-	while True:
-		ret, frame = video.read()
+	total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+	with tqdm(total=total_frames, desc='Rendering visualization', leave=False) as progress_bar:
+		while True:
+			ret, frame = video.read()
 
-		if not ret:
-			break
+			if not ret:
+				break
 
-		# For the track
-		rectangles = track.loc[track['frame_timestamp'] == frame_count]
-		for _, rentangle in rectangles.iterrows():
-			point_1 = (rentangle['entity_box_x1'], rentangle['entity_box_y1'])
-			point_2 = (rentangle['entity_box_x2'], rentangle['entity_box_y2'])
-			color = (0, 255, 0) if rentangle['label'] == 'SPEAKING_AUDIBLE' else (0, 0, 255)
-			thickness = 2
+			# For the track
+			rectangles = track.loc[track['frame_timestamp'] == frame_count]
+			draw_rectangles(frame, rectangles, ground_truth=False)
 
-			cv2.rectangle(frame, point_1, point_2, color, thickness)
+			# For Ground Truth
+			rectangles = ground_truth.loc[ground_truth['frame_timestamp'] == frame_count]
+			draw_rectangles(frame, rectangles, ground_truth=True)
 
-		# For Ground Truth
-		rectangles = ground_truth.loc[ground_truth['frame_timestamp'] == frame_count]
-		for _, rentangle in rectangles.iterrows():
-			point_1 = (rentangle['entity_box_x1'], rentangle['entity_box_y1'])
-			point_2 = (rentangle['entity_box_x2'], rentangle['entity_box_y2'])
-			color = (0, 128, 0) if rentangle['label'] == 'SPEAKING_AUDIBLE' else (0, 0, 128)
-			thickness = 2
-
-			cv2.rectangle(frame, point_1, point_2, color, thickness)
-
-		output.write(frame)
-		frame_count += 1
+			output.write(frame)
+			frame_count += 1
+			progress_bar.update(1)
 
 	video.release()
 	output.release()
@@ -54,7 +47,7 @@ def visualization(args):
 def quantize_csv(csv_path, height, width, fps):
 	colnames = ['video_id','frame_timestamp','entity_box_x1','entity_box_y1','entity_box_x2','entity_box_y2','label', 'entity_id', 'spkid']
 
-	if csv_path is None:
+	if not os.path.exists(csv_path):
 		return pd.DataFrame(columns=colnames)
 
 	track = pd.read_csv(csv_path, header=None, names=colnames)
@@ -71,16 +64,36 @@ def quantize_csv(csv_path, height, width, fps):
 	return track
 
 
-def main():
-	parser = argparse.ArgumentParser(description = "Arguments for ASD vizualization")
-	parser.add_argument('-vp', '--videoPath', 				dest='video_path',  type=str, help='Location of video to process', 					required=True)
-	parser.add_argument('-cp', '--csvPath', 					dest='csv_path',  	type=str, help='Location of tracks csv to draw', 				required=True)
-	parser.add_argument('-gtp', '--groundTruthPath', 	dest='gt_path',  		type=str, help='Location of ground truth csv to draw', 	default=None)
-	parser.add_argument('-op', '--outputPath', 				dest='output_path', type=str, help='Path to write the output video', 				default='')
+def draw_rectangles(frame, df_row, ground_truth):
+	intensity = 127 if ground_truth else 255
 
-	args = parser.parse_args()
+	for _, rentangle in df_row.iterrows():
+		point_1 = (rentangle['entity_box_x1'], rentangle['entity_box_y1'])
+		point_2 = (rentangle['entity_box_x2'], rentangle['entity_box_y2'])
+		color = (0, intensity, 0) if rentangle['label'] == 'SPEAKING_AUDIBLE' else (0, 0, intensity)
+		thickness = 2
+
+		cv2.rectangle(frame, point_1, point_2, color, thickness)
+
+
+def initialize_arguments(**kwargs):
+	parser = argparse.ArgumentParser(description = "Arguments for ASD vizualization")
+
+	parser.add_argument('--video_path', 	type=str, help='Location of video to process', 					required=True)
+	parser.add_argument('--csv_path', 		type=str, help='Location of tracks csv to draw', 				required=True)
+	parser.add_argument('--gt_path', 			type=str, help='Location of ground truth csv to draw', 	default=None)
+	parser.add_argument('--output_path',	type=str, help='Path to write the output video', 				default='')
+
+	args = argparse_helper(parser, **kwargs)
+
+	return args
+
+
+def main(**kwargs):
+	args = initialize_arguments(**kwargs, not_empty=True)
 	visualization(args)
 
 
 if __name__ == '__main__':
-	main()
+	args = initialize_arguments()
+	visualization(args)

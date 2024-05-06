@@ -5,7 +5,7 @@ import torch
 from .nets import S3FDNet
 from .box_utils import nms_
 
-PATH_WEIGHT = 'third_party/Light_ASD/model/faceDetector/s3fd/sfd_face.pth'
+PATH_WEIGHT = 'model/third_party/Light_ASD/model/faceDetector/s3fd/sfd_face.pth'
 if os.path.isfile(PATH_WEIGHT) == False:
 	Link = "1KafnHz7ccT-3IyddBsL5yi2xGtxAKypt"
 	cmd = f"gdown 1KafnHz7ccT-3IyddBsL5yi2xGtxAKypt -O {PATH_WEIGHT}"

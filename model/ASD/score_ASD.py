@@ -1,7 +1,7 @@
 import numpy as np
 import pandas, argparse
 from sklearn.metrics import accuracy_score, f1_score, average_precision_score
-from model.ASD.util import intersection_over_union
+from model.util import argparse_helper, intersection_over_union
 from tqdm import tqdm
 
 
@@ -67,9 +67,9 @@ def calculate_average_precision(labels, predictions):
 	return average_precision_score(labels, predictions)
 
 
-def evaluate_ASD(args):
-	dict_gt = load_asd_file(args.gt_file_path)
-	dict_pred = load_asd_file(args.pred_file_path)
+def score_ASD(args):
+	dict_gt = load_asd_file(args.gt_path)
+	dict_pred = load_asd_file(args.pred_path)
 	unique_entities = dict_gt['entity_id'].unique()
 
 	prediction_set = generate_prediction_sets(dict_gt, dict_pred, unique_entities)
@@ -78,6 +78,7 @@ def evaluate_ASD(args):
 	ap_total = 0
 	entity_count = len(unique_entities)
 
+	lines = []
 	for entity in unique_entities:
 		predictions = np.array(prediction_set[entity][0])
 		labels = np.array(prediction_set[entity][1])
@@ -89,25 +90,41 @@ def evaluate_ASD(args):
 		f1_total += f1_current
 		ap_total += ap_current
 
+		line = f'{entity}:\tACC:\t{(100 * accuracy):0>6.2f}\tAP:\t{(100 * ap_current):0>6.2f}\tF1:\t{(100 * f1_current):0>6.2f}'
+		lines.append(line)
+
 		if args.verbose:
-			print(f'{entity}:\tACC:\t{(100 * accuracy):0>5.2f}\tAP:\t{(100 * ap_current):0>5.2f}\tF1:\t{(100 * f1_current):0>5.2f}')
+			print(line)
 
 	f1_total /= entity_count
 	ap_total /= entity_count
-	print(f"\nAverage F1:\t{(100 * f1_total):0>5.2f}\nmAP:\t\t{(100 * ap_total):0>5.2f}")
+
+	line = f'\nAverage F1:\t{(100 * f1_total):0>6.2f}\nmAP:\t\t{(100 * ap_total):0>6.2f}'
+	lines.append(line)
+
+	if args.save_path is not None:
+		with open(args.save_path, 'w') as file:
+			file.write('\n'.join(lines))
 
 
-def main():
+def initialize_arguments(**kwargs):
 	parser = argparse.ArgumentParser(description = "Light ASD prediction")
 
-	parser.add_argument('-gt, --gt_file_path', dest='gt_file_path', type=str, required=True, help='Path of ground truth csv')
-	parser.add_argument('-pr, --pred_file_path', dest='pred_file_path', type=str, required=True, help='Path of csv predicted by ASD system')
-	parser.add_argument('--verbose', action='store_true', help='Print scoring details')
+	parser.add_argument('--gt_path', 		type=str, required=True, help='Path of ground truth csv')
+	parser.add_argument('--pred_path',	type=str, required=True, help='Path of csv predicted by ASD system')
+	parser.add_argument('--save_path', 	type=str, help='Path to save the result report')
+	parser.add_argument('--verbose', 		action='store_true', help='Print scoring details')
 
-	args = parser.parse_args()
+	args = argparse_helper(parser, **kwargs)
 
-	evaluate_ASD(args)
+	return args
 
 
-if __name__=='__main__':
-	main()
+def main(**kwargs):
+	args = initialize_arguments(**kwargs, not_empty=True)
+	score_ASD(args)
+
+
+if __name__ == '__main__':
+	args = initialize_arguments()
+	score_ASD(args)
