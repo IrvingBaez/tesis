@@ -38,7 +38,7 @@ out_file="out_"$TIMESTAMP".out"
 log_file="log_"$TIMESTAMP".log"
 
 
-${qsub_cmd}  -e $log_file -o $out_file -l hostname='!b10*&b1*|c*' clsp_grid_wrapper/pytorch_run.sh $task_file
+${qsub_cmd}  -e $log_file -o $out_file -l hostname='!b10*&b1*|c*' grid_wrapper/pytorch_run.sh $task_file
 
 # For local debugging.
-# bash clsp_grid_wrapper/pytorch_run.sh $task_file
+# bash grid_wrapper/pytorch_run.sh $task_file
