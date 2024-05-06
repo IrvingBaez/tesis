@@ -9,3 +9,8 @@ else
   echo "Creating environment ${env_name}"
 	conda create --name ${env_name} --file conda_file.txt
 fi
+
+eval "$(conda shell.bash hook)"
+conda activate ${env_name}
+
+pip3 install -r requirements.txt
