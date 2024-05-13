@@ -1,4 +1,4 @@
-import torch
+import torch, sys
 import numpy as np
 
 
@@ -11,6 +11,9 @@ class AHC_Cluster():
 	def fit_predict(self, similarity):
 		if isinstance(similarity, torch.Tensor):
 			similarity = similarity.cpu().numpy()
+
+		# np.set_printoptions(threshold=sys.maxsize)
+		# print(similarity)
 
 		dist = -similarity
 

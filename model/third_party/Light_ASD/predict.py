@@ -35,6 +35,7 @@ def scene_detect(args):
 	return sceneList
 
 
+# TODO: speed up with paralelization
 def inference_video(args):
 	# GPU: Face detection, output is the list of dicts, contains the frame number, face location and confidence score
 	detector = S3FD(device='cuda')

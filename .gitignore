@@ -2,6 +2,11 @@
 .ipynb_checkpoints
 .vscode
 
+# Downloadable dataset
+dataset/test/
+dataset/train/
+dataset/val/
+
 # Downloadable model
 *.pth
 *.ckpt

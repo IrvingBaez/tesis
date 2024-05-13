@@ -1,18 +1,38 @@
-from multiprocessing import Pool
+import os
 
-def cpu_parallel_process(function, collection, threads, args):
-	collection_split = []
-	collection_size = len(collection)
+components = {
+	'data_type':			['test', 'val', 'train', 'demo'],
+	'request':				['videos_path', 'waves_path', 'vad_path', 'asd_path', 'avd_path'],
+	'denoiser': 			['original', 'dihard18', 'noisereduce'],
+	'vad_detector':		['ground_truth', 'dihard18'],
+	'asd_detector':		['ground_truth', 'light_asd', 'talk_net'],
+	'avd_detector':		['ground_truth', 'avr_net'],
+}
 
-	for i in range(threads):
-		collection_split.append(collection[i:collection_size:threads])
+def get_path(request, data_type='val', denoiser='dihard18', vad_detector='ground_truth', asd_detector='ground_truth', avd_detector='avr_net'):
+	if request 			not in components['request']: 			raise ValueError('Invalid value for request')
+	if data_type 		not in components['data_type']: 		raise ValueError('Invalid value for data_type')
+	if denoiser 		not in components['denoiser']: 			raise ValueError('Invalid value for denoiser')
+	if vad_detector not in components['vad_detector']: 	raise ValueError('Invalid value for vad_detector')
+	if asd_detector not in components['asd_detector']: 	raise ValueError('Invalid value for asd_detector')
+	if avd_detector not in components['avd_detector']: 	raise ValueError('Invalid value for avd_detector')
 
-	pool = Pool(threads)
-	tasks = [(sublist, args) for sublist in collection_split]
+	paths = {
+		'videos_path':f'dataset/{data_type}/videos',
+		'waves_path': f'dataset/{data_type}/waves/{denoiser}',
+		'vad_path': 	f'dataset/{data_type}/vad/{denoiser}/{vad_detector}',
+		'asd_path': 	f'dataset/{data_type}/asd/{asd_detector}',
+		'avd_path': 	f'dataset/{data_type}/avd/{denoiser}/{vad_detector}/{asd_detector}/{avd_detector}',
+	}
 
-	pool.map(function, tasks)
-	pool.close()
-	pool.join()
+	path = paths[request]
+
+	if data_type == 'demo':
+		path = path.replace('dataset/', '')
+
+	os.makedirs(path, exist_ok=True)
+
+	return path
 
 
 def intersection_over_union(boxA, boxB, relativeToBoxA=False):

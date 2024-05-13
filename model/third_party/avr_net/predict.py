@@ -9,8 +9,10 @@ from collections import defaultdict
 from avr_net import AVRNET
 from shutil import rmtree
 from torch.utils.data.dataloader import DataLoader
+from pathlib import Path
 from tqdm import tqdm
 from glob import glob
+from pympler.tracker import SummaryTracker
 
 
 CONFIG = {
@@ -42,15 +44,19 @@ CONFIG = {
 
 
 def predict(args):
-	rmtree(args.save_path)
+	if os.path.exists(args.save_path):
+		rmtree(args.save_path)
+
 	os.makedirs(args.save_path)
 	os.makedirs(f'{args.save_path}/features')
 	os.makedirs(f'{args.save_path}/predictions')
 
 	model = load_model()
+	model.eval()
 
-	extract_features(model, args)
-	cluster_features(model, args)
+	with torch.no_grad():
+		extract_features(model, args)
+		cluster_features(model, args)
 
 
 def load_model():
@@ -72,7 +78,7 @@ def load_model():
 
 def extract_features(model, args):
 	# LOAD DATA
-	dataset = CustomDataset(args.data_path, args.detector)
+	dataset = CustomDataset(args.data_path, args.detector, args.denoiser)
 	dataset.load_dataset()
 
 	# Set shuffle=true for training
@@ -80,32 +86,24 @@ def extract_features(model, args):
 
 	# INSTANTIATE OPTIMIZER
 	parameters = list(model.parameters())
-	optimizer = torch.optim.Adam(parameters, lr=0.0005, weight_decay=0.0001)
-	scaler = torch.cuda.amp.GradScaler(enabled=False)
+	# optimizer = torch.optim.Adam(parameters, lr=0.0005, weight_decay=0.0001)
+	# scaler = torch.cuda.amp.GradScaler(enabled=False)
 
-	with torch.no_grad():
-		dataloader = tqdm(dataloader)
-		model_outputs = {}
+	dataloader = tqdm(dataloader, desc='Extracting features')
 
-		n = 0
-		for batch in dataloader:
-			batch['frames'] = batch['frames'].to(model.device)
-			batch['audio'] = batch['audio'].to(model.device)
+	n = 0
+	for batch in dataloader:
+		batch['frames'] = batch['frames'].to(model.device)
+		batch['audio'] = batch['audio'].to(model.device)
 
-			model_output = model(batch, exec='extraction')
+		model_output = model(batch, exec='extraction')
 
-			n += 1
-			save_batch_results(model_outputs, model_output, n)
+		n += 1
+		save_batch_results(model_output, n, args)
 
 
 def cluster_features(model, args):
-	# METRICS: [{'type': 'der', 'datasets': ['avaavd'], 'params': {'threshold': 0.14, 'relation': True, 'save_dir': 'save/token/avaavd', 'ground_truth': './dataset//rttms'}}]
-  # METRIC REQUIRED PARAMS: {'video', 'feat_audio', 'start', 'dataset_type', 'feat_video', 'end', 'trackid', 'dataset_name', 'visible'}
-
-	# Callbacks: lr_schedueler, checkpoint, logistics
-
-	features = load_features(args)
-	similarity_data = compute_similarity(model, features, args)
+	similarity_data = compute_similarity(model, args)
 	torch.save(similarity_data, f'{args.save_path}/similarity_matrix.pckl')
 
 	write_rttms(similarity_data, args)
@@ -114,6 +112,7 @@ def cluster_features(model, args):
 def write_rttms(similarity_data, args):
 	threshold = 0.14
 	cluster = AHC_Cluster(threshold)
+	rttm_list = []
 
 	for video_id in similarity_data['similarities']:
 		similarity = similarity_data['similarities'][video_id]
@@ -123,46 +122,36 @@ def write_rttms(similarity_data, args):
 
 		lines = []
 		for label, start, end in zip(labels, starts, ends):
+			if start < 0: start = 0
 			if end - start < 0.01: continue
 
-			lines.append(f'SPEAKER {video_id} 1 {start:.6f} {(end-start):.6f} <NA> <NA> {label} <NA> <NA>\n')
+			lines.append(f'SPEAKER {video_id} 1 {start:010.6f} {(end-start):010.6f} <NA> <NA> spk{label:02d} <NA> <NA>\n')
 
 		pred_path = f'{args.save_path}/predictions/{video_id}.rttm'
+		rttm_list.append(pred_path + '\n')
 
 		with open(pred_path, 'w') as file:
 			file.writelines(lines)
 
+	with open(f'{args.save_path}/rttms.out', 'w') as file:
+		file.writelines(rttm_list)
 
-def compute_similarity(model, output, args):
+
+def compute_similarity(model, args):
 	similarities = {}
 	starts = {}
 	ends = {}
 
-	feat_by_video = defaultdict(list)
-
-	for feat_video, feat_audio, video_id, start, end, visible, tackid in zip(
-		output['feat_video'], output['feat_audio'], output['video'], output['start'], output['end'], output['visible'], output['trackid']
-	):
-		feat_by_video[video_id[0]].append({
-			'video_features':	feat_video,
-			'audio_features':	feat_audio,
-			'start':					start,
-			'end':						end,
-			'visible':				visible,
-			'track_id':				tackid
-		})
-
 	batch_size = 64
 	model.eval()
-	del output
 
-	for video_id in tqdm(list(feat_by_video.keys())):
-		utterances = feat_by_video[video_id]
+	for video_id in tqdm(args.video_ids, desc='Clustering features'):
+		utterances = features_by_video(video_id, args)
 		utterance_count = len(utterances)
 		batch = []
 		similarity = torch.diag_embed(torch.ones([utterance_count]))
 
-		for i in range(utterance_count):
+		for i in tqdm(range(utterance_count), leave=False, desc=f'Proecssing {utterance_count} utterances'):
 			for j in range(i + 1, utterance_count):
 				batch.append({
 					'video_features': torch.cat((utterances[i]['video_features'], utterances[j]['video_features'])),
@@ -174,13 +163,15 @@ def compute_similarity(model, output, args):
 				})
 
 				if len(batch) == batch_size:
-					process_one_batch(batch, model, similarity)
+					similarity = process_one_batch(batch, model, similarity)
 					batch = []
 
-		if len(batch) > 0:
-			process_one_batch(batch, model, similarity)
+			if similarity[i, -1] != 0:
+				del utterances[i]['video_features']
+				del utterances[i]['audio_features']
 
-		del feat_by_video[video_id]
+		if len(batch) > 0:
+			similarity = process_one_batch(batch, model, similarity)
 
 		similarities[video_id] = similarity
 		starts[video_id] = np.array([utterance['start'] for utterance in utterances])
@@ -189,33 +180,55 @@ def compute_similarity(model, output, args):
 	return {'similarities': similarities, 'starts': starts, 'ends': ends}
 
 
+def features_by_video(video_id, args):
+	features = []
+
+	output = load_features(video_id, args)
+
+	for feat_video, feat_audio, video, start, end, visible, tackid in zip(
+		output['feat_video'], output['feat_audio'], output['video'], output['start'], output['end'], output['visible'], output['trackid']
+	):
+		features.append({
+			'video_features':	feat_video,
+			'audio_features':	feat_audio,
+			'start':					start,
+			'end':						end,
+			'visible':				visible,
+			'track_id':				tackid
+		})
+
+	return features
+
+
 def process_one_batch(batch, model, similarity):
-		video = torch.cat([data_pair['video_features'].unsqueeze(0) for data_pair in batch], dim=0)
-		audio = torch.cat([data_pair['audio_features'].unsqueeze(0) for data_pair in batch], dim=0)
+	video = torch.cat([data_pair['video_features'].unsqueeze(0) for data_pair in batch], dim=0)
+	audio = torch.cat([data_pair['audio_features'].unsqueeze(0) for data_pair in batch], dim=0)
 
-		task 	= torch.tensor([
-			torch.tensor(data_pair['visible_a'] + data_pair['visible_b'], dtype=torch.int64) for data_pair in batch
-		], device=video.device)
+	task 	= torch.tensor([
+		torch.tensor(data_pair['visible_a'] + data_pair['visible_b'], dtype=torch.int64) for data_pair in batch
+	], device=video.device)
 
-		task1 = torch.tensor([
-			torch.tensor(2 * data_pair['visible_a'] + data_pair['visible_b'], dtype=torch.int64) for data_pair in batch
-		], device=video.device)
+	task1 = torch.tensor([
+		torch.tensor(2 * data_pair['visible_a'] + data_pair['visible_b'], dtype=torch.int64) for data_pair in batch
+	], device=video.device)
 
-		task2 = torch.tensor([
-			torch.tensor(2 * data_pair['visible_b'] + data_pair['visible_a'], dtype=torch.int64) for data_pair in batch
-		], device=video.device)
+	task2 = torch.tensor([
+		torch.tensor(2 * data_pair['visible_b'] + data_pair['visible_a'], dtype=torch.int64) for data_pair in batch
+	], device=video.device)
 
-		prepared_batch = {
-			'video': video,
-			'audio': audio,
-			'task': task,
-			'task_full': [task1, task2]
-		}
+	prepared_batch = {
+		'video': video,
+		'audio': audio,
+		'task': task,
+		'task_full': [task1, task2]
+	}
 
-		scores = model(prepared_batch, exec='relation')['scores'].cpu()
+	scores = model(prepared_batch, exec='relation')['scores'].cpu()
 
-		for data_pair, score in zip(batch, scores):
-			similarity[data_pair['index_a'], data_pair['index_b']] = similarity[data_pair['index_b'], data_pair['index_a']] = score.cpu()
+	for data_pair, score in zip(batch, scores):
+		similarity[data_pair['index_a'], data_pair['index_b']] = similarity[data_pair['index_b'], data_pair['index_a']] = score.cpu()
+
+	return similarity
 
 
 def save_batch_results(cumulating, n, args):
@@ -223,7 +236,7 @@ def save_batch_results(cumulating, n, args):
 		pickle.dump(cumulating, file)
 
 
-def load_features(args):
+def load_features(video_id, args):
 	dicts = []
 	file_count = len(glob(f'{args.save_path}/features/*'))
 
@@ -234,6 +247,21 @@ def load_features(args):
 			except EOFError:
 				print(f'File {i} is empty, skipping...')
 
+	for dic in dicts:
+		to_remove = []
+		for index, data_id in enumerate(dic['video']):
+			if data_id != video_id:
+				to_remove.append(index)
+
+		to_remove = reversed(to_remove)
+		for index in to_remove:
+			dic['feat_audio'] = torch.cat((dic['feat_audio'][:index], dic['feat_audio'][index+1:]))
+			dic['feat_video'] = torch.cat((dic['feat_video'][:index], dic['feat_video'][index+1:]))
+			dic['video'].pop(index)
+			dic['start'].pop(index)
+			dic['end'].pop(index)
+			dic['trackid'].pop(index)
+			dic['visible'].pop(index)
 
 	return merge_features(dicts)
 
@@ -258,10 +286,16 @@ def initialize_arguments(**kwargs):
 
 	parser.add_argument('--data_path',	type=str, default="dataset/val",   help='Path to the main folder with the data')
 	parser.add_argument('--detector',		type=str, default="ground_truth",   help='ASD detector being evaluated')
+	parser.add_argument('--denoiser',		type=str, default="dihard18",   help='ASD detector being evaluated')
 
 	args = argparse_helper(parser, **kwargs)
 
-	args.save_path = f'{args.data_path}/avd/avr_net'
+	args.save_path = f'{args.data_path}/avd/avr_net/{args.denoiser}'
+
+	args.video_ids = []
+	for video_path in glob(f'{args.data_path}/videos/*.*'):
+		video_id = video_path.split('/')[-1].split('.')[0]
+		args.video_ids.append(video_id)
 
 	return args
 
