@@ -3,12 +3,12 @@ import gdown, zipfile, os
 
 def main():
 	ids = {
-		'train':	'1j4aIdUvb8aQW0Jkzq7AcIBZhxs_nQT_w&confirm=t',
-		'val': 		'1acHflaGbeEscqDF8gSpnxWHn3-q4Mye-&confirm=t',
-		'test': 	'11YWpZGM7XSwYtqWeg-DzhxFANYwsY3qo&confirm=t',
+		'train':	'&confirm=t',
+		'val': 		'&confirm=t',
+		'test': 	'1kd8YZzvW99_mhLZqaL6xlCb9gORXgrZR&confirm=t',
 	}
 
-	for dataset in ['train', 'val', 'test']:
+	for dataset in ['test']: # ['train', 'val', 'test']:
 		zip_path = f'dataset/{dataset}.zip'
 
 		gdown.download(id=ids[dataset], output=zip_path)
