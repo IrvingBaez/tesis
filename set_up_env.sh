@@ -1,4 +1,4 @@
-env_name='ava-exp'
+env_name='tesis'
 
 if conda info --envs | grep -q ${env_name}
 then
