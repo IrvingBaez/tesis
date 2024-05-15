@@ -571,8 +571,6 @@ def jer(file_to_ref_durs, file_to_sys_durs, file_to_cm, min_ref_dur=0):
 	----------
 	https://en.wikipedia.org/wiki/Jaccard_index
 	"""
-	# TODO: Explore treating non-speech as additional speaker for computation to
-	#	   more gracefully deal with exceptionally poor system performance.
 	ref_dur_fids = set(file_to_ref_durs.keys())
 	sys_dur_fids = set(file_to_sys_durs.keys())
 	cm_fids = set(file_to_cm.keys())

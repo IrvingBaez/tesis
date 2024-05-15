@@ -15,6 +15,7 @@ dataset/val/
 *.csv
 *.pckl
 *.out
+*.sad
 
 # Video files
 *.mp4

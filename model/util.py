@@ -9,7 +9,7 @@ components = {
 	'avd_detector':		['ground_truth', 'avr_net'],
 }
 
-def get_path(request, data_type='val', denoiser='dihard18', vad_detector='ground_truth', asd_detector='ground_truth', avd_detector='avr_net'):
+def get_path(request, data_type='test', denoiser='original', vad_detector='ground_truth', asd_detector='ground_truth', avd_detector='avr_net'):
 	if request 			not in components['request']: 			raise ValueError('Invalid value for request')
 	if data_type 		not in components['data_type']: 		raise ValueError('Invalid value for data_type')
 	if denoiser 		not in components['denoiser']: 			raise ValueError('Invalid value for denoiser')

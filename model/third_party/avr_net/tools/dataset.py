@@ -12,17 +12,20 @@ import cv2
 
 class CustomDataset(Dataset):
 	# DATASET CONFIG: {'data_dir': './dataset/', 'max_frame': 200, 'min_frame': 20, 'step_frame': 50, 'snippet_length': 1, 'missing_rate': 0, 'processors': {'face_pad_processor': {'type': 'face_pad', 'params': {'length': 1}}, 'face_to_tensor_processor': {'type': 'face_to_tensor', 'params': {}}, 'face_resize_processor': {'type': 'face_resize', 'params': {'dest_size': [112, 112]}}, 'face_normalize_processor': {'type': 'face_normalize', 'params': {'mean': 0.5, 'std': 0.5}}, 'audio_normalize_processor': {'type': 'audio_normalize', 'params': {'desired_rms': 0.1, 'eps': 0.0001}}, 'audio_to_tensor_processor': {'type': 'audio_to_tensor', 'params': {}}}, 'sampler': {}}
-	def __init__(self, data_path, detector, denoiser):
+	def __init__(self, args):
 		super().__init__()
 		self.batch_size = 10
 		self.snippet_length = 1
-		self.data_path = data_path
-		self.detector = detector
-		self.denoiser = denoiser
 		self._max_frames = 200
 		self._min_frames = 20
 		self._step_frame = 50
 		self._missing_rate = 0
+
+		self.videos_path	= args.videos_path
+		self.waves_path		= args.waves_path
+		self.labs_path		= args.labs_path
+		self.frames_path	= args.frames_path
+		self.video_ids		= args.video_ids
 
 		self.processors = []
 		self.processors.append(FacePad({'length': 1}))
@@ -121,9 +124,8 @@ class CustomDataset(Dataset):
 
 	# TODO: this function does too much stuff.
 	def load_dataset(self):
-		videos	= glob.glob(f'{self.data_path}/videos/*.*')
-		waves_path = f'{self.data_path}/denoised_waves/{self.denoiser}'
-		vad_path = f'{self.data_path}/labs'
+		waves_path 	= self.waves_path
+		vad_path 		= self.labs_path
 
 		maxs = self._max_frames / 100.0
 		mins = self._min_frames / 100.0
@@ -132,17 +134,15 @@ class CustomDataset(Dataset):
 		self.items = []
 
 		# parse audio and face segments
-		for video in videos:
-			video_name = video.split('/')[-1].split('.')[0]
-
-			vad_file_path = f'{vad_path}/{video_name}.lab'
+		for video_id in self.video_ids:
+			vad_file_path = f'{vad_path}/{video_id}.lab'
 
 			with open(vad_file_path, 'r') as f:
 				speech_segments = f.readlines()
 
 			offset = float(speech_segments[0].split()[0])
 
-			image_paths = glob.glob(f'{self.data_path}/asd/{self.detector}/aligned_tracklets/{video_name}/*')
+			image_paths = glob.glob(f'{self.frames_path}/{video_id}/*.*')
 			faces = defaultdict(lambda: defaultdict(list))
 
 			for image_path in image_paths:
@@ -175,10 +175,10 @@ class CustomDataset(Dataset):
 
 					if len(segment_faces) > 0:
 						for _, image_paths in segment_faces.items():
-							items.append((f'{waves_path}/{video_name}.wav', seg_start, duration, offset, image_paths, video_name))
+							items.append((f'{waves_path}/{video_id}.wav', seg_start, duration, offset, image_paths, video_id))
 					else:
 						# offscreen speaker
-						items.append((f'{waves_path}/{video_name}.wav', seg_start, duration, offset, [], video_name))
+						items.append((f'{waves_path}/{video_id}.wav', seg_start, duration, offset, [], video_id))
 
 				# Tuple: (wave_path, segment_start, segment_duration, offset, [image paths], video_id)
 				self.items.extend(items)

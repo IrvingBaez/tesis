@@ -149,8 +149,7 @@ def check_for_empty_files(ref_turns, sys_turns, uem):
 			warn('File "%s" missing in reference RTTMs.' % file_id)
 		if file_id not in sys_file_ids:
 			warn('File "%s" missing in system RTTMs.' % file_id)
-	# TODO: Clarify below warnings; this indicates that there are no
-	#	   ELIGIBLE reference/system turns.
+
 	if not ref_turns:
 		warn('No reference speaker turns found within UEM scoring regions.')
 	if not sys_turns:
@@ -163,7 +162,7 @@ def load_script_file(fn):
 		return [line.decode('utf-8').strip() for line in f]
 
 
-def print_table(file_scores, global_scores, n_digits=2,
+def print_table(file_scores, global_scores, output_path, n_digits=2,
 				table_format='simple'):
 	"""Pretty print scores as table.
 
@@ -199,9 +198,11 @@ def print_table(file_scores, global_scores, n_digits=2,
 	rows = sorted(file_scores, key=lambda x: x.file_id)
 	rows.append(global_scores._replace(file_id='*** OVERALL ***'))
 	floatfmt = '.%df' % n_digits
-	tbl = tabulate(
-		rows, headers=col_names, floatfmt=floatfmt, tablefmt=table_format)
-	print(tbl)
+	tbl = tabulate(rows, headers=col_names, floatfmt=floatfmt, tablefmt=table_format)
+
+	with open(output_path, 'w') as file:
+		file.write(tbl)
+
 
 
 def perform_scoring(args):
@@ -254,7 +255,7 @@ def perform_scoring(args):
 		jer_min_ref_dur=args.jer_min_ref_dur, collar=args.collar,
 		ignore_overlaps=args.ignore_overlaps)
 	print_table(
-		file_scores, global_scores, args.n_digits, args.table_format)
+		file_scores, global_scores, args.output_path, args.n_digits, args.table_format)
 
 
 def initialize_arguments(**kwargs):
@@ -302,12 +303,12 @@ def initialize_arguments(**kwargs):
 		metavar='STR',
 		help='tabulate table format (default: %(default)s)')
 	parser.add_argument(
+		'--output_path', nargs=None, dest='output_path', default=None,
+		metavar='STR',
+		help='Path to store output as file')
+	parser.add_argument(
 		'--version', action='version',
 		version='%(prog)s ' + VERSION)
-
-	if len(sys.argv) == 1:
-		parser.print_help()
-		sys.exit(1)
 
 	args = argparse_helper(parser, **kwargs)
 

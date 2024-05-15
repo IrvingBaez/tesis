@@ -4,15 +4,12 @@ import numpy as np
 from model.third_party.avr_net.tools.custom_collator import CustomCollator
 from model.third_party.avr_net.tools.ahc_cluster import AHC_Cluster
 from model.third_party.avr_net.tools.dataset import CustomDataset
+from model.third_party.avr_net.avr_net import AVRNET
 from model.util import argparse_helper
-from collections import defaultdict
-from avr_net import AVRNET
 from shutil import rmtree
 from torch.utils.data.dataloader import DataLoader
-from pathlib import Path
 from tqdm import tqdm
 from glob import glob
-from pympler.tracker import SummaryTracker
 
 
 CONFIG = {
@@ -44,12 +41,12 @@ CONFIG = {
 
 
 def predict(args):
-	if os.path.exists(args.save_path):
-		rmtree(args.save_path)
+	if os.path.exists(args.sys_path):
+		rmtree(args.sys_path)
 
-	os.makedirs(args.save_path)
-	os.makedirs(f'{args.save_path}/features')
-	os.makedirs(f'{args.save_path}/predictions')
+	os.makedirs(args.sys_path)
+	os.makedirs(f'{args.sys_path}/features')
+	os.makedirs(f'{args.sys_path}/predictions')
 
 	model = load_model()
 	model.eval()
@@ -57,6 +54,8 @@ def predict(args):
 	with torch.no_grad():
 		extract_features(model, args)
 		cluster_features(model, args)
+
+	rmtree(f'{args.sys_path}/features')
 
 
 def load_model():
@@ -78,14 +77,14 @@ def load_model():
 
 def extract_features(model, args):
 	# LOAD DATA
-	dataset = CustomDataset(args.data_path, args.detector, args.denoiser)
+	dataset = CustomDataset(args)
 	dataset.load_dataset()
 
 	# Set shuffle=true for training
 	dataloader = DataLoader(dataset, batch_size=64, shuffle=False, num_workers=2, pin_memory=True, drop_last=False, collate_fn=CustomCollator())
 
 	# INSTANTIATE OPTIMIZER
-	parameters = list(model.parameters())
+	# parameters = list(model.parameters())
 	# optimizer = torch.optim.Adam(parameters, lr=0.0005, weight_decay=0.0001)
 	# scaler = torch.cuda.amp.GradScaler(enabled=False)
 
@@ -104,7 +103,7 @@ def extract_features(model, args):
 
 def cluster_features(model, args):
 	similarity_data = compute_similarity(model, args)
-	torch.save(similarity_data, f'{args.save_path}/similarity_matrix.pckl')
+	torch.save(similarity_data, f'{args.sys_path}/similarity_matrix.pckl')
 
 	write_rttms(similarity_data, args)
 
@@ -127,13 +126,13 @@ def write_rttms(similarity_data, args):
 
 			lines.append(f'SPEAKER {video_id} 1 {start:010.6f} {(end-start):010.6f} <NA> <NA> spk{label:02d} <NA> <NA>\n')
 
-		pred_path = f'{args.save_path}/predictions/{video_id}.rttm'
+		pred_path = f'{args.sys_path}/predictions/{video_id}.rttm'
 		rttm_list.append(pred_path + '\n')
 
 		with open(pred_path, 'w') as file:
 			file.writelines(lines)
 
-	with open(f'{args.save_path}/rttms.out', 'w') as file:
+	with open(f'{args.sys_path}/rttms.out', 'w') as file:
 		file.writelines(rttm_list)
 
 
@@ -232,16 +231,16 @@ def process_one_batch(batch, model, similarity):
 
 
 def save_batch_results(cumulating, n, args):
-	with open(f'{args.save_path}/features/batch_{n}.pckl', 'wb') as file:
+	with open(f'{args.sys_path}/features/batch_{n}.pckl', 'wb') as file:
 		pickle.dump(cumulating, file)
 
 
 def load_features(video_id, args):
 	dicts = []
-	file_count = len(glob(f'{args.save_path}/features/*'))
+	file_count = len(glob(f'{args.sys_path}/features/*'))
 
 	for i in range(1, file_count + 1):
-		with open(f'{args.save_path}/features/batch_{i}.pckl', 'rb') as file:
+		with open(f'{args.sys_path}/features/batch_{i}.pckl', 'rb') as file:
 			try:
 				dicts.append(pickle.load(file))
 			except EOFError:
@@ -284,16 +283,17 @@ def merge_features(dicts):
 def initialize_arguments(**kwargs):
 	parser = argparse.ArgumentParser(description = "Light ASD prediction")
 
-	parser.add_argument('--data_path',	type=str, default="dataset/val",   help='Path to the main folder with the data')
-	parser.add_argument('--detector',		type=str, default="ground_truth",   help='ASD detector being evaluated')
-	parser.add_argument('--denoiser',		type=str, default="dihard18",   help='ASD detector being evaluated')
+	parser.add_argument('--videos_path',	type=str,	help='Path to the videos to work with')
+	parser.add_argument('--waves_path',		type=str,	help='Path to the waves, already denoised')
+	parser.add_argument('--labs_path',		type=str,	help='Path to the lab files with voice activity detection info')
+	parser.add_argument('--frames_path',	type=str,	help='Path to the face frames already cropped and aligned')
+	parser.add_argument('--tracks_path',	type=str,	help='Path to the csv files containing the active speaker detection info')
+	parser.add_argument('--sys_path',			type=str,	help='Path to the folder where to save all the system outputs')
 
 	args = argparse_helper(parser, **kwargs)
 
-	args.save_path = f'{args.data_path}/avd/avr_net/{args.denoiser}'
-
 	args.video_ids = []
-	for video_path in glob(f'{args.data_path}/videos/*.*'):
+	for video_path in glob(f'{args.videos_path}/*.*'):
 		video_id = video_path.split('/')[-1].split('.')[0]
 		args.video_ids.append(video_id)
 

@@ -68,7 +68,6 @@ class AVRNET(pl.LightningModule):
 
 			output['feat_audio']	= feat_audio
 			output['feat_video']	= feat_video
-			# TODO: Collator should take care of data shape
 			output['video']				= batch['meta']['video']
 			output['start']				= batch['meta']['start']
 			output['end']					= batch['meta']['end']

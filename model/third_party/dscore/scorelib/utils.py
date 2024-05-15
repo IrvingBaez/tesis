@@ -15,7 +15,7 @@ def error(msg, file=sys.stderr):
 	msg = 'ERROR: %s' % msg
 	if six.PY2:
 		msg = msg.encode('utf-8')
-	print(msg, file=file)
+	# print(msg, file=file)
 
 
 def info(msg, print_level=False, file=sys.stdout):
@@ -24,7 +24,7 @@ def info(msg, print_level=False, file=sys.stdout):
 		msg = 'INFO: %s' %msg
 	if six.PY2:
 		msg = msg.encode('utf-8')
-	print(msg, file=file)
+	# print(msg, file=file)
 
 
 def warn(msg, file=sys.stderr):
@@ -32,7 +32,7 @@ def warn(msg, file=sys.stderr):
 	msg = 'WARNING: %s' %msg
 	if six.PY2:
 		msg = msg.encode('utf-8')
-	print(msg, file=file)
+	# print(msg, file=file)
 
 
 def xor(x, y):

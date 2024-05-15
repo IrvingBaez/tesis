@@ -67,7 +67,6 @@ def turns_to_frames(turns, score_regions, step=0.010):
 	return X
 
 
-# TODO: Consider mapping all speech overlaps to a single class.
 def flatten_labels(labels):
 	"""Helper function to convert output of ``turns_to_frames`` to 1-D array of
 	unique values.
