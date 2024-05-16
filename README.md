@@ -21,6 +21,7 @@ To download AVA-AVD dataset, run:
 `python3 dataset/scripts/download.py`
 
 generate requirements.txt:
+`conda list --explicit > conda_file.txt`
 `pip freeze | grep -v ' @ file://' > requirements.txt`
 
 Available to download:

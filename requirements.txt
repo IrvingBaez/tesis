@@ -28,6 +28,7 @@ h5py==3.11.0
 iglovikov-helper-functions==0.0.53
 imagecorruptions==1.1.2
 imageio==2.34.0
+intervaltree==3.1.0
 ipython-genutils==0.2.0
 joblib==1.4.0
 jpeg4py==0.1.4
@@ -61,6 +62,7 @@ pyarrow==16.0.0
 pydantic==2.7.1
 pydantic_core==2.18.2
 pydeck==0.9.0b0
+Pympler==1.0.1
 python-speech-features==0.6
 pytorch-lightning==2.2.3
 retina-face==0.0.17
@@ -71,9 +73,11 @@ scikit-image==0.23.2
 scikit-learn==1.4.2
 setuptools==68.2.2
 smmap==5.0.1
+sortedcontainers==2.4.0
 soundfile==0.12.1
 soxr==0.3.7
 streamlit==1.33.0
+tabulate==0.9.0
 tenacity==8.2.3
 tensorboard==2.16.2
 tensorboard-data-server==0.7.2
