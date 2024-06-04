@@ -18,7 +18,7 @@ class AVRNET(pl.LightningModule):
 		self.video_encoder	= VideoEncoder(self.config['video'])
 		self.relation_layer	= RelationLayer(self.config['relation'])
 
-		ckpt_state_dict = torch.load(self.config['checkpoint'])['model_state_dict']
+		ckpt_state_dict = torch.load(self.config['checkpoint'])
 		self.load_state_dict(ckpt_state_dict, strict=True)
 
 

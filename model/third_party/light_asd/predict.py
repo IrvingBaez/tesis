@@ -1,9 +1,8 @@
 import torch.multiprocessing as multiprocessing
 multiprocessing.set_start_method('spawn', force=True)
 
-import time, sys, os, torch, argparse, glob, subprocess, warnings, cv2, pickle, numpy, math, python_speech_features
+import time, os, torch, argparse, glob, subprocess, warnings, cv2, pickle, numpy, math, python_speech_features, logging
 
-from math import floor
 from tqdm import tqdm
 from scipy import signal
 from shutil import rmtree
@@ -12,7 +11,7 @@ from scipy.interpolate import interp1d
 from tqdm.contrib.concurrent import process_map
 from scenedetect import open_video, SceneManager, ContentDetector, StatsManager
 
-from model.util import argparse_helper
+from model.util import argparse_helper, intersection_over_union
 from .model.faceDetector.s3fd import S3FD
 from .ASD import ASD
 
@@ -21,6 +20,8 @@ warnings.filterwarnings("ignore")
 
 def scene_detect(args):
 	# CPU: Scene detection, output is the list of each shot's time duration
+	logging.getLogger('pyscenedetect').setLevel(logging.ERROR)
+
 	video = open_video(args.videoFilePath)
 	statsManager = StatsManager()
 	sceneManager = SceneManager(statsManager)
@@ -72,21 +73,6 @@ def detect_faces(data):
 	return results
 
 
-def bb_intersection_over_union(boxA, boxB):
-	# CPU: IOU Function to calculate overlap between two image
-	xA = max(boxA[0], boxB[0])
-	yA = max(boxA[1], boxB[1])
-	xB = min(boxA[2], boxB[2])
-	yB = min(boxA[3], boxB[3])
-	interArea = max(0, xB - xA) * max(0, yB - yA)
-	boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
-	boxBArea = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
-
-	iou = interArea / float(boxAArea + boxBArea - interArea)
-
-	return iou
-
-
 def track_shot(args, sceneFaces):
 	# CPU: Face tracking
 	iouThres = 0.5     # Minimum IOU between consecutive face detections
@@ -101,7 +87,7 @@ def track_shot(args, sceneFaces):
 					track.append(face)
 					frameFaces.remove(face)
 				elif face['frame'] - track[-1]['frame'] <= args.num_failed_det:
-					iou = bb_intersection_over_union(face['bbox'], track[-1]['bbox'])
+					iou = intersection_over_union(face['bbox'], track[-1]['bbox'])
 					if iou > iouThres:
 						track.append(face)
 						frameFaces.remove(face)
@@ -146,8 +132,8 @@ def crop_video(args, track, cropFile):
 	detections['y'] = signal.medfilt(detections['y'], kernel_size=13)
 
 	for frame_index, frame in enumerate(track['frame']):
-		crop_scale  = args.crop_scale
-		box_size  = detections['s'][frame_index]   # Detection box size
+		crop_scale 	= args.crop_scale
+		box_size 		= detections['s'][frame_index]   # Detection box size
 		box_padding = int(box_size * (1 + 2 * crop_scale))  # Pad videos by this amount
 
 		image = cv2.imread(frames[frame])
@@ -156,7 +142,7 @@ def crop_video(args, track, cropFile):
 		mx = detections['x'][frame_index] + box_padding  # BBox center X
 
 		y_1 = int(my - box_size)
-		y_2 = int(my + box_size * (1 + 2 * box_size))
+		y_2 = int(my + box_size * (1 + 2 * crop_scale))
 		x_1 = int(mx - box_size * (1 + crop_scale))
 		x_2 = int(mx + box_size * (1 + crop_scale))
 
@@ -170,12 +156,12 @@ def crop_video(args, track, cropFile):
 	vOut.release()
 
 	command = f"ffmpeg -y -i {args.audioFilePath} -async 1 -ac 1 -vn -acodec pcm_s16le -ar 16000 -threads {args.num_loader_treads} -ss {audioStart} -to {audioEnd} {audioTmp} -loglevel panic"
-	subprocess.call(command, shell=True, stdout=None)
+	subprocess.call(command, shell=True, stdout=None) # Crop audio file
 
 	_, audio = wavfile.read(audioTmp)
-	command = ("ffmpeg -y -i %st.avi -i %s -threads %d -c:v copy -c:a copy %s.avi -loglevel panic" % \
-				(cropFile, audioTmp, args.num_loader_treads, cropFile)) # Combine audio and video file
-	subprocess.call(command, shell=True, stdout=None)
+	command = f"ffmpeg -y -i {cropFile}t.avi -i {audioTmp} -threads {args.num_loader_treads} -c:v copy -c:a copy {cropFile}.avi -loglevel panic"
+	subprocess.call(command, shell=True, stdout=None) # Combine audio and video file
+
 	os.remove(cropFile + 't.avi')
 
 	return {'track':track, 'proc_track':detections}
@@ -185,34 +171,36 @@ def evaluate_network(files, args):
 	# GPU: active speaker detection by pretrained model
 	detector = ASD()
 	detector.loadParameters(args.pretrained_model)
-	# print(f"Model {args.pretrained_model} loaded from previous state!")
 	detector.eval()
 	allScores = []
 
 	# durationSet = {1,2,4,6} # To make the result more reliable
 	durationSet = {1,1,1,2,2,2,3,3,4,5,6} # Use this line can get more reliable result
+
 	for file in tqdm(files, total = len(files), desc='3: Evaluating network', leave=False):
-		fileName = os.path.splitext(file.split('/')[-1])[0] # Load audio and video
+		fileName = os.path.splitext(file.split('/')[-1])[0]
 		_, audio = wavfile.read(os.path.join(args.pycropPath, fileName + '.wav'))
-		audioFeature = python_speech_features.mfcc(audio)
 		video = cv2.VideoCapture(os.path.join(args.pycropPath, fileName + '.avi'))
+
 		videoFeature = []
 
 		while video.isOpened():
-			ret, frames = video.read()
+			success, frames = video.read()
 
-			if ret == True:
-				face = cv2.cvtColor(frames, cv2.COLOR_BGR2GRAY)
-				face = cv2.resize(face, (224,224))
-				face = face[int(112-(112/2)):int(112+(112/2)), int(112-(112/2)):int(112+(112/2))]
-				videoFeature.append(face)
-			else:
-				break
+			if not success: break
+
+			face = cv2.cvtColor(frames, cv2.COLOR_BGR2GRAY)
+			face = cv2.resize(face, (224,224))
+			face = face[56:168, 56:168]
+			# face = face[int(112-(112/2)):int(112+(112/2)), int(112-(112/2)):int(112+(112/2))]
+			videoFeature.append(face)
 
 		video.release()
 
+		audioFeature = python_speech_features.mfcc(audio)
 		videoFeature = numpy.array(videoFeature)
-		length = 4 * min(floor(audioFeature.shape[0] / 4), videoFeature.shape[0]) / 100
+
+		length = 4 * min(math.floor(audioFeature.shape[0] / 4), videoFeature.shape[0]) / 100
 		# length = min((audioFeature.shape[0] - audioFeature.shape[0] % 4) / 100, videoFeature.shape[0])
 		audioFeature = audioFeature[:int(round(length * 100)),:]
 		videoFeature = videoFeature[:int(round(length * 25)),:,:]
@@ -228,6 +216,7 @@ def evaluate_network(files, args):
 					inputV = torch.FloatTensor(videoFeature[(i * duration * 25) : ((i+1) * duration * 25),:,:]).unsqueeze(0).cuda()
 					embedA = detector.model.forward_audio_frontend(inputA)
 					embedV = detector.model.forward_visual_frontend(inputV)
+
 					out = detector.model.forward_audio_visual_backend(embedA, embedV)
 					score = detector.lossAV.forward(out, labels = None)
 					scores.extend(score)
@@ -385,9 +374,7 @@ def predict(args):
 	allTracks = []
 	for shot in scene:
 		frame_count = shot[1].frame_num - shot[0].frame_num
-
-		if frame_count < args.min_track:
-			continue
+		if frame_count < args.min_track: continue
 
 		allTracks.extend(track_shot(args, faces[shot[0].frame_num:shot[1].frame_num])) # 'frames' to present this tracks' timestep, 'bbox' presents the location of the faces
 	log(f"Face track detected {len(allTracks)} tracks")
@@ -402,7 +389,7 @@ def predict(args):
 	report_save('face crops', args.pycropPath)
 
 	# Active Speaker Detection
-	files = glob.glob("%s/*.avi"%args.pycropPath)
+	files = glob.glob(f"{args.pycropPath}/*.avi")
 	files.sort()
 	scores = evaluate_network(files, args)
 

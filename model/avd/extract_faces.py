@@ -4,6 +4,7 @@ multiprocessing.set_start_method('spawn', force=True)
 import argparse, os, cv2
 import pandas as pd
 import numpy as np
+from moviepy.editor import VideoFileClip
 from glob import glob
 from tqdm.contrib.concurrent import process_map
 
@@ -49,14 +50,8 @@ def read_track(path):
 def crop_and_align_frame(data):
 	frame_path, track_row, video, aligner = data
 
-	cam = cv2.VideoCapture(video)
-	if not cam.isOpened(): return
-
-	cam.set(cv2.CAP_PROP_POS_MSEC, track_row['frame_timestamp'] * 1000)
-	success, frame = cam.read()
-	cam.release()
-
-	if not success: return
+	with VideoFileClip(video) as clip:
+		frame = clip.get_frame(track_row['frame_timestamp'])
 
 	height, width = frame.shape[:2]
 
@@ -90,7 +85,7 @@ def initialize_arguments(**kwargs):
 
 	parser.add_argument('--data_type',		type=str, default="val", 					help='Location of dataset to process')
 	parser.add_argument('--asd_detector', type=str, default="ground_truth", help='Name of folder containing tracks to use in processing')
-	parser.add_argument('--n_threads',  	type=int, default=2, 							help='Number of threads for preprocessing')
+	parser.add_argument('--n_threads',  	type=int, default=6, 							help='Number of threads for preprocessing')
 
 	args = util.argparse_helper(parser, **kwargs)
 

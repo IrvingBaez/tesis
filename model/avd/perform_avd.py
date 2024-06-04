@@ -33,7 +33,7 @@ def initialize_arguments(**kwargs):
 
 	args.videos_path	= util.get_path('videos_path', data_type=args.data_type)
 	args.waves_path 	= util.get_path('waves_path', data_type=args.data_type, denoiser=args.denoiser)
-	args.labs_path 		= util.get_path('vad_path', data_type=args.data_type, denoiser=args.denoiser, vad_detector=args.vad_detector) + '/predictions'
+	args.labs_path 		= util.get_path('vad_path', data_type=args.data_type, denoiser='dihard18', vad_detector=args.vad_detector) + '/predictions'
 
 	asd_path 					= util.get_path('asd_path', data_type=args.data_type, asd_detector=args.asd_detector)
 	args.frames_path 	= f'{asd_path}/aligned_tracklets'

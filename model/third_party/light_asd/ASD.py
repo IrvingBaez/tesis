@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
-import sys, time, numpy, os, subprocess, pandas, tqdm
+import sys, time, subprocess, pandas, tqdm
 from subprocess import PIPE
 
 from .loss import lossAV, lossV

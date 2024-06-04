@@ -4,6 +4,7 @@ from glob import glob
 from tqdm import tqdm
 
 from model.third_party.light_asd import predict as light_asd_predict
+from model.third_party.TalkNet import predict as talknet_predict
 import model.util as util
 import model.asd.score_asd as score_asd
 import model.asd.visualize_asd as visualize_asd
@@ -22,6 +23,9 @@ def perform_asd(args):
 		pred_path						=	f'{args.save_csv_path}/{video_name}.csv'
 		score_path					=	f'{args.save_score_path}/{video_name}.out'
 		visualization_path	=	f'{args.save_visualization_path}/{video_name}.avi'
+
+		if os.path.exists(pred_path):
+			continue
 
 		speaker_detector.main(video_folder=args.videos_path, video_name=video_name, csv_path=args.save_csv_path) #, verbose=args.verbose)
 
@@ -44,8 +48,7 @@ def get_detector(args):
 	if args.asd_detector == 'light_asd':
 		return light_asd_predict
 	if args.asd_detector == 'talk_net':
-		# TODO: Implement TalkNet
-		return
+		return talknet_predict
 
 
 def get_total_asd_score(args):

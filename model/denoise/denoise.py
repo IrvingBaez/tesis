@@ -61,7 +61,7 @@ def noisereduce_denoise(args):
 		if not os.path.exists(denoised_path):
 			denoise_tasks.append((original_path, denoised_path))
 
-	process_map(ffmpeg_command, denoise_tasks, max_workers=args.n_threads, chunksize=1, desc='Denoising with noisereduce')
+	process_map(apply_noisereduce, denoise_tasks, max_workers=args.n_threads, chunksize=1, desc='Denoising with noisereduce')
 
 
 def apply_noisereduce(data):
