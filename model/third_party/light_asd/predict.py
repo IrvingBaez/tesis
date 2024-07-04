@@ -1,7 +1,7 @@
 import torch.multiprocessing as multiprocessing
 multiprocessing.set_start_method('spawn', force=True)
 
-import time, sys, os, torch, argparse, glob, subprocess, warnings, cv2, pickle, numpy, math, python_speech_features
+import time, os, torch, argparse, glob, subprocess, warnings, cv2, pickle, numpy, math, python_speech_features, logging
 
 from math import floor
 from tqdm import tqdm
@@ -21,6 +21,8 @@ warnings.filterwarnings("ignore")
 
 def scene_detect(args):
 	# CPU: Scene detection, output is the list of each shot's time duration
+	logging.getLogger('pyscenedetect').setLevel(logging.ERROR)
+
 	video = open_video(args.videoFilePath)
 	statsManager = StatsManager()
 	sceneManager = SceneManager(statsManager)
@@ -241,19 +243,21 @@ def evaluate_network(files, args):
 
 
 def build_csv(tracks, scores, args):
-	os.makedirs(args.csv_path, exist_ok = True)
 	video = cv2.VideoCapture(f'{args.pyaviPath}/video.avi')
 	height = video.get(cv2.CAP_PROP_FRAME_HEIGHT)
 	width = video.get(cv2.CAP_PROP_FRAME_WIDTH)
 
-	file_id = '_'.join(args.video_name.split('_')[:-1])
+	file_id = args.csv_path.split('/')[-1].split('.')[0]
+	segment = int(file_id.split('_')[-1])
+
+	offset = 600 + 300 * segment
 
 	lines = []
 	spk_count = 0
 
 	for start in range(0, 300, 60):
 		end = start + 60
-		section_id = f'{file_id}_{start:04d}_{end:04d}'
+		section_id = f'{file_id}_{(start+offset):04d}_{(end+offset):04d}'
 
 		for track_index, track in enumerate(tracks):
 			if not start <= (track['track']['frame'][0] / args.fps) < end: continue
@@ -270,8 +274,8 @@ def build_csv(tracks, scores, args):
 				line = [file_id]
 
 				# Frame timestamp
-				time_stamp = frame / args.fps
-				time_stamp = math.floor(time_stamp * 100) / 100
+				time_stamp = (frame / args.fps) + offset
+				time_stamp = round(time_stamp, 6)
 				line.append(time_stamp)
 
 				# Bounding box coordinates
@@ -296,7 +300,7 @@ def build_csv(tracks, scores, args):
 
 				lines.append(','.join(map(str, line)) + '\n')
 
-	with open(f'{args.csv_path}/{args.video_name}.csv', 'w') as csv:
+	with open(args.csv_path, 'w') as csv:
 		for line in lines:
 			csv.write(line)
 

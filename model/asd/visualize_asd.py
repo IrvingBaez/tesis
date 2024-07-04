@@ -42,7 +42,7 @@ def visualization(args):
 
 	video.release()
 	output.release()
-	cv2.destroyAllWindows()
+	# cv2.destroyAllWindows()
 
 	with_sound_path = args.output_path.split('.')[0] + '_sound.avi'
 	cmd = f'ffmpeg -y -i {args.audio_path} -r 30 -i {args.output_path}  -filter:a aresample=async=1 -c:a flac -c:v copy {with_sound_path}'
@@ -52,7 +52,7 @@ def visualization(args):
 def quantize_csv(csv_path, height, width, fps):
 	colnames = ['video_id','frame_timestamp','entity_box_x1','entity_box_y1','entity_box_x2','entity_box_y2','label', 'entity_id', 'spkid']
 
-	if not os.path.exists(csv_path):
+	if csv_path is None or not os.path.exists(csv_path):
 		return pd.DataFrame(columns=colnames)
 
 	track = pd.read_csv(csv_path, header=None, names=colnames)
@@ -79,8 +79,8 @@ def draw_rectangles(frame, df_row, ground_truth):
 		thickness = 2
 
 		cv2.rectangle(frame, point_1, point_2, color, thickness)
-		if isinstance(rentangle['entity_id'], str):
-			cv2.putText(frame, rentangle['entity_id'], (point_1[0], point_2[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+		# if isinstance(rentangle['entity_id'], str):
+		# 	cv2.putText(frame, rentangle['entity_id'], (point_1[0], point_2[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
 
 
 def initialize_arguments(**kwargs):

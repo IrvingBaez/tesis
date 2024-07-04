@@ -2,6 +2,8 @@
 # Ubuntu-16.04)
 # FROM nvidia/cuda:10.1-cudnn8-runtime-ubuntu18.04
 FROM nvidia/cuda:11.4.3-cudnn8-runtime-ubuntu18.04
+# FROM nvidia/cuda:10.1-cudnn7-devel-ubuntu18.04
+
 
 # Install packages.
 RUN apt-get update && \
@@ -18,13 +20,14 @@ RUN ln -s /usr/lib/x86_64-linux-gnu/libmpi_cxx.so.20 /usr/lib/x86_64-linux-gnu/l
 
 # Install Python 3.6.
 RUN add-apt-repository ppa:deadsnakes/ppa
-RUN apt-get update && \
-    apt-get install -y python3.6 python3-pip
+RUN apt-get update
+RUN apt-get install -y python3.6 python3-pip
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 0
 
 # Install Python packages.
-RUN pip3 install --upgrade pip && \
-    pip3 install numpy scipy librosa joblib webrtcvad wurlitzer cntk-gpu tqdm
+RUN pip3 install --upgrade pip
+RUN pip3 install numpy scipy librosa joblib webrtcvad wurlitzer tqdm
+RUN pip3 install --no-cache-dir cntk_gpu
 
 
 # Copy the repository inside the docker in /dihard18

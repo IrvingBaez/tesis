@@ -3,9 +3,11 @@
 .vscode
 
 # Downloadable dataset
-dataset/test/
-dataset/train/
-dataset/val/
+dataset/videos/
+dataset/waves/
+dataset/vad/
+dataset/asd/
+dataset/avd/
 
 # Downloadable model
 *.pth
@@ -16,22 +18,6 @@ dataset/val/
 *.pckl
 *.out
 *.sad
-
-# Video files
-*.mp4
-*.mkv
-*.webm
-*.avi
-
-# Audio files
-*.wav
-
-# Image files
-*.jpg
-
-# Annotations
-*.rttm
-*.lab
 
 # Not part of the project
 *.ipynb

@@ -1,7 +1,7 @@
 import torch, argparse, pickle, os
 import numpy as np
 
-from model.third_party.avr_net.tools.custom_collator import CustomCollator
+from model.third_party.avr_net.tools.predict_collator import PredictCollator
 from model.third_party.avr_net.tools.ahc_cluster import AHC_Cluster
 from model.third_party.avr_net.tools.dataset import CustomDataset
 from model.third_party.avr_net.avr_net import AVRNET
@@ -80,8 +80,8 @@ def extract_features(model, args):
 	dataset = CustomDataset(args)
 	dataset.load_dataset()
 
-	# Set shuffle=true for training
-	dataloader = DataLoader(dataset, batch_size=64, shuffle=False, num_workers=2, pin_memory=True, drop_last=False, collate_fn=CustomCollator())
+	# Set shuffle=true for training: test should be 17199 items, is 17063
+	dataloader = DataLoader(dataset, batch_size=255, shuffle=False, num_workers=2, pin_memory=True, drop_last=False, collate_fn=PredictCollator())
 
 	# INSTANTIATE OPTIMIZER
 	# parameters = list(model.parameters())
@@ -115,9 +115,11 @@ def write_rttms(similarity_data, args):
 
 	for video_id in similarity_data['similarities']:
 		similarity = similarity_data['similarities'][video_id]
-		labels = cluster.fit_predict(similarity)
 		starts = similarity_data['starts'][video_id]
 		ends = similarity_data['ends'][video_id]
+		labels = cluster.fit_predict(similarity)
+
+		starts, ends, labels = merge_frames(starts, ends, labels)
 
 		lines = []
 		for label, start, end in zip(labels, starts, ends):
@@ -132,8 +134,32 @@ def write_rttms(similarity_data, args):
 		with open(pred_path, 'w') as file:
 			file.writelines(lines)
 
-	with open(f'{args.sys_path}/rttms.out', 'w') as file:
+	with open(f'{args.sys_path}/{args.data_type}.out', 'w') as file:
 		file.writelines(rttm_list)
+
+
+def merge_frames(starts, ends, labels):
+    # Sort the segments by their start times
+    sorted_indices = np.argsort(starts)
+    starts, ends, labels = starts[sorted_indices], ends[sorted_indices], labels[sorted_indices]
+
+    # Identify adjacent or overlapping segments with the same label
+    adjacent_or_overlapping = np.logical_or(np.isclose(ends[:-1], starts[1:]), ends[:-1] > starts[1:])
+    different_labels_or_separated = np.logical_or(~adjacent_or_overlapping, labels[1:] != labels[:-1])
+    split_indices = np.nonzero(different_labels_or_separated)[0]
+
+    # Merge the segments based on the identified split points
+    merged_starts = starts[np.r_[0, split_indices + 1]]
+    merged_ends = ends[np.r_[split_indices, -1]]
+    merged_labels = labels[np.r_[0, split_indices + 1]]
+
+    # Adjust for overlapping segments by averaging the overlap points
+    overlapping_indices = np.nonzero(merged_starts[1:] < merged_ends[:-1])[0]
+    merged_ends[overlapping_indices] = merged_starts[overlapping_indices + 1] = (
+        merged_ends[overlapping_indices] + merged_starts[overlapping_indices + 1]
+    ) / 2.0
+
+    return merged_starts, merged_ends, merged_labels
 
 
 def compute_similarity(model, args):
@@ -141,7 +167,7 @@ def compute_similarity(model, args):
 	starts = {}
 	ends = {}
 
-	batch_size = 64
+	batch_size = 255
 	model.eval()
 
 	for video_id in tqdm(args.video_ids, desc='Clustering features'):
@@ -150,7 +176,7 @@ def compute_similarity(model, args):
 		batch = []
 		similarity = torch.diag_embed(torch.ones([utterance_count]))
 
-		for i in tqdm(range(utterance_count), leave=False, desc=f'Proecssing {utterance_count} utterances'):
+		for i in tqdm(range(utterance_count), leave=False, desc=f'Processing {utterance_count} utterances'):
 			for j in range(i + 1, utterance_count):
 				batch.append({
 					'video_features': torch.cat((utterances[i]['video_features'], utterances[j]['video_features'])),
@@ -283,6 +309,8 @@ def merge_features(dicts):
 def initialize_arguments(**kwargs):
 	parser = argparse.ArgumentParser(description = "Light ASD prediction")
 
+	parser.add_argument('--data_type',		type=str,	help='Type of data being processed, test, val or train')
+	parser.add_argument('--video_ids',		type=str,	help='Video ids separated by commas')
 	parser.add_argument('--videos_path',	type=str,	help='Path to the videos to work with')
 	parser.add_argument('--waves_path',		type=str,	help='Path to the waves, already denoised')
 	parser.add_argument('--labs_path',		type=str,	help='Path to the lab files with voice activity detection info')
@@ -292,10 +320,7 @@ def initialize_arguments(**kwargs):
 
 	args = argparse_helper(parser, **kwargs)
 
-	args.video_ids = []
-	for video_path in glob(f'{args.videos_path}/*.*'):
-		video_id = video_path.split('/')[-1].split('.')[0]
-		args.video_ids.append(video_id)
+	args.video_ids = args.video_ids.split(',')
 
 	return args
 

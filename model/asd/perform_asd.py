@@ -4,6 +4,7 @@ from glob import glob
 from tqdm import tqdm
 
 from model.third_party.light_asd import predict as light_asd_predict
+from model.third_party.TalkNet import predict as talknet_predict
 import model.util as util
 import model.asd.score_asd as score_asd
 import model.asd.visualize_asd as visualize_asd
@@ -17,25 +18,28 @@ def perform_asd(args):
 	speaker_detector = get_detector(args)
 
 	for video in tqdm(args.videos, desc=f'Performing ASD with {args.asd_detector}'):
-		video_name					= video.split('/')[-1].split('.')[0]
-		gt_path							=	f'{args.load_gt_path}/{video_name}.csv'
-		pred_path						=	f'{args.save_csv_path}/{video_name}.csv'
-		score_path					=	f'{args.save_score_path}/{video_name}.out'
-		visualization_path	=	f'{args.save_visualization_path}/{video_name}.avi'
+		for segment in tqdm(range(1, 4), leave=False):
+			video_name					= video.split('/')[-1].split('.')[0]
+			gt_path							=	f'{args.load_gt_path}/{video_name}_0{segment}.csv'
+			pred_path						=	f'{args.save_csv_path}/{video_name}_0{segment}.csv'
+			score_path					=	f'{args.save_score_path}/{video_name}_0{segment}.out'
+			visualization_path	=	f'{args.save_visualization_path}/{video_name}_0{segment}.avi'
 
-		speaker_detector.main(video_folder=args.videos_path, video_name=video_name, csv_path=args.save_csv_path) #, verbose=args.verbose)
+			if os.path.exists(pred_path):
+				continue
 
-		if os.path.exists(video.split('.')[0]):
-			rmtree(video.split('.')[0])
+			start = 600 + 300 * segment
+			speaker_detector.main(video_folder=args.videos_path, video_name=video_name, csv_path=pred_path, num_loader_treads=args.workers, start=start, duration=300)
 
-		if os.path.exists(gt_path):
-			score_asd.main(gt_path=gt_path, pred_path=pred_path, save_path=score_path) # , verbose=args.verbose)
+			if os.path.exists(video.split('.')[0]):
+				rmtree(video.split('.')[0])
 
-		if args.visualize:
-			audio_path = f'{args.waves_path}/{video_name}.wav'
-			visualize_asd.main(video_path=video, csv_path=pred_path, gt_path=gt_path, output_path=visualization_path, audio_path=audio_path)
+			if os.path.exists(gt_path):
+				score_asd.main(gt_path=gt_path, pred_path=pred_path, save_path=score_path)
 
-		torch.cuda.empty_cache()
+			if args.visualize:
+				audio_path = f'{args.waves_path}/{video_name}.wav'
+				visualize_asd.main(video_path=video, csv_path=pred_path, gt_path=gt_path, output_path=visualization_path, audio_path=audio_path)
 
 	get_total_asd_score(args)
 
@@ -44,8 +48,7 @@ def get_detector(args):
 	if args.asd_detector == 'light_asd':
 		return light_asd_predict
 	if args.asd_detector == 'talk_net':
-		# TODO: Implement TalkNet
-		return
+		return talknet_predict
 
 
 def get_total_asd_score(args):
@@ -77,15 +80,16 @@ def initialize_arguments(**kwargs):
 
 	parser.add_argument('--data_type',		type=str, default="test", 			help='Type of dataset to process')
 	parser.add_argument('--asd_detector',	type=str, default='light_asd',	help='Active Speaker Detector')
+	parser.add_argument('--workers',			type=int, default=10,						help='Max number of workers for ASD')
 	parser.add_argument('--verbose', 		action='store_true', help='Print progress and process')
 	parser.add_argument('--visualize', 	action='store_true', help='Make video to visualize AVD predictions vs ground truth')
 
 	args = util.argparse_helper(parser, **kwargs)
 
-	args.videos_path 	= util.get_path('videos_path',	data_type=args.data_type)
-	args.waves_path		= util.get_path('waves_path',		data_type=args.data_type, denoiser='original')
-	args.load_path 		= util.get_path('asd_path',			data_type=args.data_type)
-	args.save_path 		= util.get_path('asd_path',			data_type=args.data_type, asd_detector=args.asd_detector)
+	args.videos_path 	= util.get_path('videos_path')
+	args.waves_path		= util.get_path('waves_path', denoiser='original')
+	args.load_path 		= util.get_path('asd_path', asd_detector='ground_truth')
+	args.save_path 		= util.get_path('asd_path',	asd_detector=args.asd_detector)
 
 	args.load_gt_path 						= f'{args.load_path}/predictions'
 	args.save_csv_path 						= f'{args.save_path}/predictions'

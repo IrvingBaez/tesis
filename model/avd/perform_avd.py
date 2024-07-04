@@ -1,5 +1,7 @@
-import argparse
+import argparse, os
 import model.util as util
+from glob import glob
+from datetime import datetime
 from model.avd.score_avd import main as score_avd
 
 from model.third_party.avr_net.predict import main as avr_net
@@ -8,6 +10,8 @@ from model.third_party.avr_net.predict import main as avr_net
 def perform_avd(args):
 	if args.avd_detector == 'avr_net':
 		arguments = {
+			'data_type':		args.data_type,
+			'video_ids':		','.join(args.video_ids),
 			'videos_path':	args.videos_path,
 			'waves_path': 	args.waves_path,
 			'labs_path': 		args.labs_path,
@@ -17,7 +21,27 @@ def perform_avd(args):
 		}
 		avr_net(**arguments)
 
-	score_avd(data_type=args.data_type, denoiser=args.denoiser, vad_detector=args.vad_detector, asd_detector=args.asd_detector, avd_detector=args.avd_detector)
+	score_avd_validation(args)
+
+
+def score_avd_validation(args):
+	score_avd(data_type=args.data_type, avd_detector=args.avd_detector)
+
+	score_path = util.get_path('avd_path', avd_detector = args.avd_detector) + '/scores.out'
+	with open(score_path, 'r') as file:
+		scores = file.read()
+
+	os.makedirs(f'results', exist_ok=True)
+
+	timestamp = datetime.now().strftime('%Y_%b_%d_%H:%M:%S')
+	with open(f'results/{timestamp}.out', 'w') as file:
+		file.write(f'data_type:    {args.data_type}\n')
+		file.write(f'denoiser:     {args.denoiser}\n')
+		file.write(f'vad_detector: {args.vad_detector}\n')
+		file.write(f'asd_detector: {args.asd_detector}\n')
+		file.write(f'avd_detector: {args.avd_detector}\n')
+		file.write(f'aligned:      {args.aligned}\n\n')
+		file.write(scores)
 
 
 def initialize_arguments(**kwargs):
@@ -28,19 +52,22 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--vad_detector', type=str, default="ground_truth", help='Voice activity detector to find off-screen speakers')
 	parser.add_argument('--asd_detector', type=str, default="ground_truth", help='Active speacker detection used for face cropping')
 	parser.add_argument('--avd_detector', type=str, default="avr_net", 			help='Model to use for audio visual diarozation')
+	parser.add_argument('--aligned', 			action='store_true', 							help='Used aligned frame crops')
 
 	args = util.argparse_helper(parser, **kwargs)
 
-	args.videos_path	= util.get_path('videos_path', data_type=args.data_type)
-	args.waves_path 	= util.get_path('waves_path', data_type=args.data_type, denoiser=args.denoiser)
-	args.labs_path 		= util.get_path('vad_path', data_type=args.data_type, denoiser=args.denoiser, vad_detector=args.vad_detector) + '/predictions'
+	with open(f'dataset/split/{args.data_type}.list', 'r') as file:
+		args.video_ids = file.read().split('\n')
 
-	asd_path 					= util.get_path('asd_path', data_type=args.data_type, asd_detector=args.asd_detector)
-	args.frames_path 	= f'{asd_path}/aligned_tracklets'
+	args.videos_path	= util.get_path('videos_path')
+	args.waves_path 	= util.get_path('waves_path', denoiser=args.denoiser)
+	args.labs_path 		= util.get_path('vad_path', vad_detector=args.vad_detector) + '/predictions'
+
+	asd_path 					= util.get_path('asd_path', asd_detector=args.asd_detector)
+	args.frames_path 	= f'{asd_path}/aligned_tracklets' if args.aligned else f'{asd_path}/tracklets'
 	args.tracks_path 	= f'{asd_path}/predictions'
 
-	args.ref_path = util.get_path('avd_path', data_type=args.data_type, denoiser='dihard18', vad_detector='ground_truth', asd_detector='ground_truth', avd_detector= 'ground_truth')
-	args.sys_path = util.get_path('avd_path', data_type=args.data_type, denoiser=args.denoiser, vad_detector=args.vad_detector, asd_detector=args.asd_detector, avd_detector= args.avd_detector)
+	args.sys_path = util.get_path('avd_path', avd_detector= args.avd_detector)
 
 	return args
 

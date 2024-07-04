@@ -98,6 +98,28 @@ class RelationLayer(nn.Module):
 		return x, label
 
 
+	def predict(self, video, audio, task):
+		audio = self.batch_norm_audio(audio)
+		feat = torch.cat((video, audio), dim=2)
+
+		N = feat.shape[0]
+		x1 = torch.cat([feat[:, 0:1, ...], feat[:, 1:2, ...]], dim=2)
+		x2 = torch.cat([feat[:, 1:2, ...], feat[:, 0:1, ...]], dim=2)
+		x = torch.cat([x1, x2], dim=1)
+		token = torch.cat((self.task_token(task[0]).unsqueeze(1), self.task_token(task[1]).unsqueeze(1)), dim=1)
+
+		N, S, C, H, W = x.shape
+		x = x.reshape(N*S, C, H, W)
+		token = token.reshape(N*S, 1536, 1, 1)
+		x = x * token
+		x = self.layer1(x)
+		x = self.layer2(x)
+		x = self.fc(x.flatten(1))
+		x = x.reshape(N, -1, 1).mean(1)
+
+		return x
+
+
 	def batch_norm_audio(self, audio):
 		N, D, C, H, W = audio.shape
 		audio = self.bna(audio.reshape(N*D, C, H, W))
@@ -135,28 +157,6 @@ class RelationLayer(nn.Module):
 		token = torch.cat((self.task_token(2*support_v + query_v), self.task_token(2*query_v + support_v)), dim=0)
 
 		return support, query, token, label
-
-
-	def predict(self, video, audio, task):
-		audio = self.batch_norm_audio(audio)
-		feat = torch.cat((video, audio), dim=2)
-
-		N = feat.shape[0]
-		x1 = torch.cat([feat[:, 0:1, ...], feat[:, 1:2, ...]], dim=2)
-		x2 = torch.cat([feat[:, 1:2, ...], feat[:, 0:1, ...]], dim=2)
-		x = torch.cat([x1, x2], dim=1)
-		token = torch.cat((self.task_token(task[0]).unsqueeze(1), self.task_token(task[1]).unsqueeze(1)), dim=1)
-
-		N, S, C, H, W = x.shape
-		x = x.reshape(N*S, C, H, W)
-		token = token.reshape(N*S, 1536, 1, 1)
-		x = x * token
-		x = self.layer1(x)
-		x = self.layer2(x)
-		x = self.fc(x.flatten(1))
-		x = x.reshape(N, -1, 1).mean(1)
-
-		return x
 
 
 class Bottleneck(nn.Module):

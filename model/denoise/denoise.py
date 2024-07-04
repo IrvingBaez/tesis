@@ -5,6 +5,7 @@ from glob import glob
 import model.util as util
 from scipy.io import wavfile
 import noisereduce
+import pandas as pd
 
 
 def denoise(args):
@@ -23,17 +24,19 @@ def extract_waves(args):
 
 	for video_path in glob(f'{args.videos_path}/*.*'):
 		uid = os.path.basename(video_path).split('.')[0]
-		original_wave_path = f'{args.original_waves_path}/{uid}.wav'
 
-		if not os.path.exists(original_wave_path):
-			extract_tasks.append((video_path, original_wave_path))
+		extract_tasks.append((video_path, '00:15:00.0', f'{args.original_waves_path}/{uid}_01.wav'))
+		extract_tasks.append((video_path, '00:20:00.0', f'{args.original_waves_path}/{uid}_02.wav'))
+		extract_tasks.append((video_path, '00:25:00.0', f'{args.original_waves_path}/{uid}_03.wav'))
 
 	process_map(ffmpeg_command, extract_tasks, max_workers=args.n_threads, chunksize=1, desc='Extracting waves')
 
 
 def ffmpeg_command(data):
-		video, output_path = data
-		subprocess.call(f'ffmpeg -y -i {video} -qscale:a 0 -ac 1 -vn -threads 1 -ar 16000 {output_path} -loglevel panic'.split())
+	video, start_time, output_path = data
+	if os.path.isfile(output_path): return
+
+	subprocess.call(f'ffmpeg -y -i {video} -ss {start_time} -t 00:05:00.0 -qscale:a 0 -ac 1 -vn -ar 16000 {output_path} -loglevel panic'.split())
 
 
 def dihard18_denoise(args):
@@ -52,6 +55,15 @@ def dihard18_denoise(args):
 	os.rename(f'{args.original_waves_path}/dihard18', args.denoised_waves_path)
 	os.rename(f'{args.original_waves_path}/vad', f'{args.vad_path}/predictions')
 
+	for path in glob(f'{args.vad_path}/predictions/*.*'):
+		segment = int(path.split('/')[-1].split('.')[0].rsplit('_', 1)[-1])
+		offset = 600 + 300 * segment
+
+		lab = pd.read_csv(path, sep=' ', names=['start', 'end', 'label'])
+		lab['start'] += offset
+		lab['end'] += offset
+		lab.to_csv(path, sep=' ', header=None, index=False)
+
 
 def noisereduce_denoise(args):
 	denoise_tasks = []
@@ -61,7 +73,7 @@ def noisereduce_denoise(args):
 		if not os.path.exists(denoised_path):
 			denoise_tasks.append((original_path, denoised_path))
 
-	process_map(ffmpeg_command, denoise_tasks, max_workers=args.n_threads, chunksize=1, desc='Denoising with noisereduce')
+	process_map(apply_noisereduce, denoise_tasks, max_workers=args.n_threads, chunksize=1, desc='Denoising with noisereduce')
 
 
 def apply_noisereduce(data):
@@ -82,12 +94,12 @@ def initialize_arguments(**kwargs):
 
 	args = util.argparse_helper(parser, **kwargs)
 
-	args.videos_path = util.get_path('videos_path', data_type=args.data_type)
-	args.original_waves_path = util.get_path('waves_path', data_type=args.data_type, denoiser='original')
-	args.denoised_waves_path = util.get_path('waves_path', data_type=args.data_type, denoiser=args.denoiser)
+	args.videos_path = util.get_path('videos_path')
+	args.original_waves_path = util.get_path('waves_path', denoiser='original')
+	args.denoised_waves_path = util.get_path('waves_path', denoiser=args.denoiser)
 
 	if args.denoiser == 'dihard18':
-		args.vad_path = util.get_path('vad_path', data_type=args.data_type, denoiser='dihard18', vad_detector='dihard18')
+		args.vad_path = util.get_path('vad_path', vad_detector='dihard18')
 
 	return args
 

@@ -21,11 +21,11 @@ class CustomDataset(Dataset):
 		self._step_frame = 50
 		self._missing_rate = 0
 
+		self.video_ids		= args.video_ids
 		self.videos_path	= args.videos_path
 		self.waves_path		= args.waves_path
 		self.labs_path		= args.labs_path
 		self.frames_path	= args.frames_path
-		self.video_ids		= args.video_ids
 
 		self.processors = []
 		self.processors.append(FacePad({'length': 1}))
@@ -78,10 +78,12 @@ class CustomDataset(Dataset):
 		audio, sample_rate = soundfile.read(item[0])
 
 		start, dura = item[1] - item[3], item[2]
+		start, dura = round(start, 6), round(dura, 6)
 		audio = audio[int(start * sample_rate) : int((start + dura) * sample_rate)]
 
 		audiosize = audio.shape[0]
-		if audiosize == 0: raise RuntimeError('Audio length is zero, check the file')
+		if audiosize == 0:
+			raise RuntimeError('Audio length is zero, check the file')
 
 		max_audio = self._max_frames * int(sample_rate / 100)
 
@@ -90,17 +92,17 @@ class CustomDataset(Dataset):
 			audio = np.pad(audio, (0, shortage), 'wrap')
 			audiosize = audio.shape[0]
 
-		if audiosize >= max_audio:
+		if audiosize > max_audio:
 			startframe = int(torch.rand([1]).item()*(audiosize-max_audio))
 			audio = audio[startframe: startframe+max_audio]
 
 		return audio
 
 
-	def _load_frames(self, frames):
-		if len(frames) > 0:
-			indices = torch.randint(0, len(frames), [self.snippet_length])
-			frames = np.array([cv2.cvtColor(cv2.imread(frames[i]), cv2.COLOR_BGR2RGB) for i in indices])
+	def _load_frames(self, frame_paths):
+		if len(frame_paths) > 0:
+			indices = [0] # torch.randint(0, len(frame_paths), [self.snippet_length])
+			frames = np.array([cv2.cvtColor(cv2.imread(frame_paths[i]), cv2.COLOR_BGR2RGB) for i in indices])
 		else:
 			frames = np.array([], dtype=np.uint8)
 
@@ -113,6 +115,7 @@ class CustomDataset(Dataset):
 			trackid = track + ':' + id
 		else:
 				trackid = 'NA'
+
 		meta = {
 			'video': self.items[index][-1],
 			'start': self.items[index][1],
@@ -134,19 +137,20 @@ class CustomDataset(Dataset):
 		self.items = []
 
 		# parse audio and face segments
-		for video_id in self.video_ids:
+		for video_id in sorted(self.video_ids):
 			vad_file_path = f'{vad_path}/{video_id}.lab'
 
 			with open(vad_file_path, 'r') as f:
 				speech_segments = f.readlines()
 
-			offset = float(speech_segments[0].split()[0])
+			offset = 600.0 + float(video_id.rsplit('_', 1)[-1]) * 300.0
 
 			image_paths = glob.glob(f'{self.frames_path}/{video_id}/*.*')
+			image_paths = sorted(image_paths)
 			faces = defaultdict(lambda: defaultdict(list))
 
 			for image_path in image_paths:
-				# ['2XeFK-DTSZk_0960_1020', '23', '983.89', '1', '01spk01']
+				# ['2XeFK-DTSZk_0960_1020', '23', '983.89', '1', 'spk01']
 				track, id, timestamp, _, _ = image_path.split('/')[-1].rsplit('.', 1)[0].split(':')
 				trackid = f'{track}:{id}'
 				faces[float(timestamp)][trackid].append(image_path)
@@ -159,12 +163,15 @@ class CustomDataset(Dataset):
 				items = []
 				timestamps = np.sort(np.array(list(faces.keys())))
 
-				# Splits segments if they are too long (2s), skips them if they are too short (0.2s)
+				# Splits segments if they are too long (0.5s), skips them if they are too short (0.2s)
 				for seg_start in np.arange(start, end, step):
-					duration = min(maxs, end - seg_start)
+					if seg_start < offset: seg_start = offset
+					duration = round(min(maxs, end - seg_start), 6)
+
+					if start + duration > offset + 300.0: continue
 					if duration < mins: continue
 
-					segment_timestamps = timestamps[np.searchsorted(timestamps, seg_start) : np.searchsorted(timestamps, seg_start+duration)]
+					segment_timestamps = timestamps[np.searchsorted(timestamps, seg_start) : np.searchsorted(timestamps, round(seg_start+duration, 6))]
 					segment_faces = defaultdict(list)
 
 					for timestamp in segment_timestamps:

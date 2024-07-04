@@ -18,7 +18,7 @@ class AVRNET(pl.LightningModule):
 		self.video_encoder	= VideoEncoder(self.config['video'])
 		self.relation_layer	= RelationLayer(self.config['relation'])
 
-		ckpt_state_dict = torch.load(self.config['checkpoint'])['model_state_dict']
+		ckpt_state_dict = torch.load(self.config['checkpoint']) #['model_state_dict']
 		self.load_state_dict(ckpt_state_dict, strict=True)
 
 
@@ -40,19 +40,19 @@ class AVRNET(pl.LightningModule):
 
 
 	# TODO: This is terrible code, `forward` should't manage or split like this.
-	def forward(self, batch, exec=None):
-		# if batch['dataset_type'] == 'train':
-		# 	return self._forward_train(batch)
-		# else:
-		return self._forward_predict(batch, exec)
+	def forward(self, batch, exec:str=None):
+		if exec == 'train':
+			return self._forward_train(batch)
+		else:
+			return self._forward_predict(batch, exec)
 
 
 	def _forward_train(self, batch):
 		feat_audio = self.audio_encoder(batch)
 		feat_video = self.video_encoder(batch)
 
-		targets = batch.targets
-		visible = torch.tensor(batch.meta.visible, dtype=torch.int64, device=targets.device)
+		targets = batch['targets']
+		visible = torch.tensor(batch['meta']['visible'], dtype=torch.int64, device=targets.device)
 
 		scores, targets = self.relation_layer(feat_video, feat_audio, visible, targets)
 

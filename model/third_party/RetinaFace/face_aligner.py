@@ -96,6 +96,14 @@ class face_aligner():
             img = None
         return img
 
+    def cleanup(self):
+        # Explicitly release GPU resources if necessary
+        if hasattr(self.detector, 'model'):
+            del self.detector.model
+        if hasattr(self.detector, 'device'):
+            self.detector.device = None
+
+
 class HiddenPrints:
     def __enter__(self):
         self._original_stdout = sys.stdout

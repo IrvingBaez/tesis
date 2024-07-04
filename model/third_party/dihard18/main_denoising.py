@@ -262,10 +262,13 @@ def main_denoising(wav_files, output_dir, verbose=False, **kwargs):
                         (src_wav_file, BITDEPTH))
             continue
 
+        bn = os.path.basename(src_wav_file)
+        dest_wav_file = os.path.join(output_dir, bn)
+
+        if os.path.exists(dest_wav_file): continue
+
         # Denoise.
         try:
-            bn = os.path.basename(src_wav_file)
-            dest_wav_file = os.path.join(output_dir, bn)
             denoise_wav(src_wav_file, dest_wav_file, global_mean, global_var, **kwargs)
         except Exception as e:
             msg = 'Problem encountered while processing file "%s". Skipping.' % src_wav_file

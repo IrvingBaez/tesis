@@ -18,11 +18,11 @@ def get_path(request, data_type='test', denoiser='original', vad_detector='groun
 	if avd_detector not in components['avd_detector']: 	raise ValueError('Invalid value for avd_detector')
 
 	paths = {
-		'videos_path':f'dataset/{data_type}/videos',
-		'waves_path': f'dataset/{data_type}/waves/{denoiser}',
-		'vad_path': 	f'dataset/{data_type}/vad/{denoiser}/{vad_detector}',
-		'asd_path': 	f'dataset/{data_type}/asd/{asd_detector}',
-		'avd_path': 	f'dataset/{data_type}/avd/{denoiser}/{vad_detector}/{asd_detector}/{avd_detector}',
+		'videos_path':f'dataset/videos',
+		'waves_path': f'dataset/waves/{denoiser}',
+		'vad_path': 	f'dataset/vad/{vad_detector}',
+		'asd_path': 	f'dataset/asd/{asd_detector}',
+		'avd_path': 	f'dataset/avd/{avd_detector}',
 	}
 
 	path = paths[request]
@@ -61,7 +61,21 @@ def argparse_helper(parser, **kwargs):
 			if key == 'not_empty': continue
 
 			args_list.append(f'--{key}')
-			if isinstance(value, str): args_list.append(value)
+
+			if isinstance(value, bool):
+				if value:
+					continue
+				else:
+					args_list.pop()
+
+			if isinstance(value, str):
+				if value.startswith('-'):
+					args_list[-1] += f'={value}'
+				else:
+					args_list.append(value)
+
+			if isinstance(value, int): args_list.append(str(value))
+			if isinstance(value, float): args_list.append(str(value))
 	else:
 		args_list = None
 

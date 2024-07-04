@@ -7,7 +7,7 @@ class FacePad:
 		self.length = config['length']
 
 	def __call__(self, item):
-		if item['frames'].shape[0] == 0 or not hasattr(item, 'frames'):
+		if item['frames'].shape[0] == 0:
 			item['frames'] = np.zeros((self.length, 224, 224, 3), dtype=np.uint8)
 
 		if item['frames'].shape[0] < self.length:

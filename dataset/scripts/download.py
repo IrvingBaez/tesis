@@ -1,28 +1,22 @@
-import gdown, zipfile, os
+import gdown, zipfile, os, subprocess
+from tqdm.auto import tqdm
 
 
 def main():
-	ids = {
-		'train':	'&confirm=t',
-		'val': 		'&confirm=t',
-		'test': 	'1kd8YZzvW99_mhLZqaL6xlCb9gORXgrZR&confirm=t',
-	}
+	save_dir = 'dataset/videos'
+	os.makedirs(save_dir, exist_ok=True)
 
-	for dataset in ['test']: # ['train', 'val', 'test']:
-		zip_path = f'dataset/{dataset}.zip'
+	with open('dataset/split/video.list', 'r') as f:
+		videos = f.readlines()
 
-		gdown.download(id=ids[dataset], output=zip_path)
+	for video in tqdm(videos):
+		if os.path.isfile(f'{save_dir}/{video.strip()}'): continue
 
-		with zipfile.ZipFile(zip_path, 'r') as file:
-			file.extractall('dataset')
+		cmd = f'wget -P {save_dir} https://s3.amazonaws.com/ava-dataset/trainval/{video.strip()}'
+		subprocess.call(cmd, shell=True)
 
-		os.remove(zip_path)
+	gdown.download('1MZIfZRLug1t2o3I8tReC8eTu9V76mtHi')
 
 
 if __name__ == '__main__':
 	main()
-
-# If I ever need to manually download training data again.
-# https://www.quora.com/How-can-you-download-files-exceeding-2-0-GB-on-Google-Drive
-
-# curl -H "Authorization: Bearer ya29.a0AXooCgtSb6ZG-UNVZBxTmARduO47n1von-2RBy_C87GBoQWUsQJHMuHFZXTWZYOvIncXLQhwX8ARZwkRB8xZiKtjz6HEnRMF8Sj0ao4e4L7g6jHcLMMiB9hWVy_HWJsEENBlLBA6di9nCOaLM9Yzs1YXB_TzI8Onni81aCgYKAbUSARASFQHGX2MiJf6vujd0KERhvce_nJp7zg0171" https://www.googleapis.com/drive/v3/files/1j4aIdUvb8aQW0Jkzq7AcIBZhxs_nQT_w?alt=media -o train.zip

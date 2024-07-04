@@ -296,7 +296,7 @@ def initialize_arguments(**kwargs):
 		'--step', nargs=None, default=0.010, type=float, metavar='FLOAT',
 		help='step size in seconds (default: %(default)s)')
 	parser.add_argument(
-		'--n_digits', nargs=None, default=2, type=int, metavar='INT',
+		'--n_digits', nargs=None, default=4, type=int, metavar='INT',
 		help='number of decimal places to print (default: %(default)s)')
 	parser.add_argument(
 		'--table_fmt', nargs=None, dest='table_format', default='simple',
