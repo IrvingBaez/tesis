@@ -44,13 +44,12 @@ def align_frame(data):
 def initialize_arguments(**kwargs):
 	parser = argparse.ArgumentParser(description = "Arguments for face alignment")
 
-	parser.add_argument('--data_type',		type=str, default="val", 					help='Location of dataset to process')
 	parser.add_argument('--asd_detector', type=str, default="ground_truth", help='Name of folder containing tracks to use in processing')
 	parser.add_argument('--n_threads',  	type=int, default=6, 							help='Number of threads for preprocessing')
 
 	args = util.argparse_helper(parser, **kwargs)
 
-	args.asd_path = util.get_path('asd_path', data_type=args.data_type, asd_detector=args.asd_detector)
+	args.asd_path = util.get_path('asd_path', asd_detector=args.asd_detector)
 	args.tracklets_path = f'{args.asd_path}/tracklets'
 	args.aligned_tracklets_path = f'{args.asd_path}/aligned_tracklets'
 

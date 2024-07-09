@@ -17,13 +17,22 @@ def perform_asd(args):
 
 	speaker_detector = get_detector(args)
 
-	for video in tqdm(args.videos, desc=f'Performing ASD with {args.asd_detector}'):
+	with open('dataset/split/train.list', 'r') as file:
+		train_list = file.read().split('\n')
+
+	progress_bar = tqdm(args.videos, desc=f'Performing ASD with {args.asd_detector}')
+	for video in progress_bar:
+		video_name = video.split('/')[-1].split('.')[0]
+		progress_bar.set_description(f'Performing ASD with {args.asd_detector} on {video_name}')
+
 		for segment in tqdm(range(1, 4), leave=False):
-			video_name					= video.split('/')[-1].split('.')[0]
 			gt_path							=	f'{args.load_gt_path}/{video_name}_0{segment}.csv'
 			pred_path						=	f'{args.save_csv_path}/{video_name}_0{segment}.csv'
 			score_path					=	f'{args.save_score_path}/{video_name}_0{segment}.out'
 			visualization_path	=	f'{args.save_visualization_path}/{video_name}_0{segment}.avi'
+
+			# There's never a reason to perform ASD on train set.
+			if f'{video_name}_0{segment}' in train_list: continue
 
 			if os.path.exists(pred_path):
 				continue
@@ -96,7 +105,7 @@ def initialize_arguments(**kwargs):
 	args.save_score_path 					= f'{args.save_path}/scores'
 	args.save_visualization_path 	= f'{args.save_path}/visualization'
 
-	args.videos = glob(f'{args.videos_path}/*.*')
+	args.videos = sorted(glob(f'{args.videos_path}/*.*'))
 
 	return args
 

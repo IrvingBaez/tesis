@@ -39,9 +39,7 @@ def extract_faces(args):
 
 
 def read_track(path):
-	if not os.path.exists(path):
-		print(f'Track: {path} not found.')
-		return None
+	if not os.path.exists(path): return None
 
 	colnames = ['video_id','frame_timestamp','entity_box_x1','entity_box_y1','entity_box_x2','entity_box_y2','label','entity_id', 'spkid']
 	track = pd.read_csv(path, header=None, names=colnames, na_values=[''], keep_default_na=False)

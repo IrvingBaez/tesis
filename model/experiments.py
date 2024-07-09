@@ -10,7 +10,7 @@ from model.asd.visualize_asd import main as visualize_asd
 
 # TODO: Implement this process for unnanotated videos.
 if __name__=='__main__':
-	data_type = 'test'
+	data_type = 'val'
 
 	print('\n\n1- DENOISE WAVES')
 	# for denoiser in ['noisereduce', 'dihard18']:
@@ -22,29 +22,38 @@ if __name__=='__main__':
 
 
 	print('\n\n3- ACTIVE SPEAKER DETECTION')
-	for asd_detector in ['talk_net', 'light_asd']:
-		perform_asd(data_type=data_type, asd_detector=asd_detector, workers=1)
+	# for asd_detector in ['talk_net', 'light_asd']:
+	# 	perform_asd(data_type=data_type, asd_detector=asd_detector, workers=1)
 
 
 	print('\n\n4- FACE CROPPING')
-	for asd_detector in ['ground_truth', 'talk_net', 'light_asd']:
-		extract_faces(data_type=data_type, asd_detector=asd_detector)
+	# for asd_detector in ['ground_truth', 'talk_net', 'light_asd']:
+	# 	extract_faces(data_type=data_type, asd_detector=asd_detector)
 
 	print('\n\n5- FACE ALIGN')
-	for asd_detector in ['ground_truth', 'light_asd', 'talk_net']:
-		align_faces(data_type=data_type, asd_detector=asd_detector)
-
+	# for asd_detector in ['ground_truth', 'light_asd', 'talk_net']:
+	# 	align_faces(asd_detector=asd_detector)
 
 	print('\n\n6- TRAINING AUDIO VISUAL DIARIZATION')
-	params = {'denoiser': 'dihard18', 'vad_detector': 'ground_truth', 'asd_detector': 'ground_truth', 'avd_detector': 'avr_net', 'aligned': True}
+	# params = {'denoiser': 'dihard18', 'vad_detector': 'ground_truth', 'asd_detector': 'ground_truth', 'avd_detector': 'avr_net', 'aligned': True}
 
-	train_avd(**params)
+	# train_avd(**params)
 
 
 	print('\n\n6- AUDIO VISUAL DIARIZATION')
-	avd_tests = [
-		# {'data_type': data_type, 'denoiser': 'dihard18', 			'vad_detector': 'ground_truth', 'asd_detector': 'talk_net', 	'avd_detector': 'avr_net', 'aligned': True},
-	]
+	avd_tests = []
+	for vad_detector in ['ground_truth', 'dihard18']:
+		for asd_detector in ['ground_truth', 'light_asd', 'talk_net']:
+			for denoiser in ['dihard18', 'noisereduce', 'original']:
+				for aligned in [False, True]:
+					avd_tests.append({
+						'data_type': 		data_type,
+						'denoiser': 		denoiser,
+						'vad_detector': vad_detector,
+						'asd_detector': asd_detector,
+						'aligned': 			aligned,
+						'avd_detector': 'avr_net'
+					})
 
 	for params in avd_tests:
 		print(params)

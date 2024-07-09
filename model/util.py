@@ -63,10 +63,9 @@ def argparse_helper(parser, **kwargs):
 			args_list.append(f'--{key}')
 
 			if isinstance(value, bool):
-				if value:
-					continue
-				else:
+				if not value:
 					args_list.pop()
+				continue
 
 			if isinstance(value, str):
 				if value.startswith('-'):
