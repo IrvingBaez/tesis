@@ -1,4 +1,4 @@
-import torch
+import torch, os, gdown
 import torch.nn as nn
 import pytorch_lightning as pl
 
@@ -18,7 +18,10 @@ class AVRNET(pl.LightningModule):
 		self.video_encoder	= VideoEncoder(self.config['video'])
 		self.relation_layer	= RelationLayer(self.config['relation'])
 
-		ckpt_state_dict = torch.load(self.config['checkpoint']) #['model_state_dict']
+		if not os.path.isfile(self.config['checkpoint']):
+			gdown.download('1qX-Azl6KkuJv9DdQgIQ9GlpP3111RK2b', self.config['checkpoint'], quiet=True)
+
+		ckpt_state_dict = torch.load(self.config['checkpoint'])
 		self.load_state_dict(ckpt_state_dict, strict=True)
 
 

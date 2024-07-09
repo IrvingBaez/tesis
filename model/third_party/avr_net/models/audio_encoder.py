@@ -1,4 +1,4 @@
-import torch, torchaudio
+import torch, torchaudio, os, gdown
 import torch.nn.functional as F
 from torch import nn
 
@@ -65,6 +65,9 @@ class AudioEncoder(nn.Module):
 			elif isinstance(m, nn.BatchNorm2d):
 				nn.init.constant_(m.weight, 1)
 				nn.init.constant_(m.bias, 0)
+
+		if not os.path.isfile(self.init_weight):
+			gdown.download('1RI_mUBiyKf3sT-UXDvG7ogsqcFGnnnQp', self.init_weight, quiet=True)
 
 		ckpt_state_dict = torch.load(self.init_weight)
 		self.load_state_dict(ckpt_state_dict)

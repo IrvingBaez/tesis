@@ -1,4 +1,4 @@
-import torch
+import torch, os, gdown
 from torch import nn
 
 
@@ -74,6 +74,9 @@ class VideoEncoder(nn.Module):
 			for module in self.modules():
 				if isinstance(module, IBasicBlock):
 					nn.init.constant_(module.bn2.weight, 0)
+
+		if not os.path.isfile(self.init_weight):
+			gdown.download('1zIpguXWZRlYLVXWD9JOgEqCduK4Op5SA', self.init_weight, quiet=True)
 
 		ckpt_state_dict = torch.load(self.init_weight)
 		self.load_state_dict(ckpt_state_dict)
