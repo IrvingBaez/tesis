@@ -76,7 +76,8 @@ class VideoEncoder(nn.Module):
 					nn.init.constant_(module.bn2.weight, 0)
 
 		if not os.path.isfile(self.init_weight):
-			gdown.download('1zIpguXWZRlYLVXWD9JOgEqCduK4Op5SA', self.init_weight, quiet=True)
+			os.makedirs(self.init_weight.rsplit('/', 1)[0], exist_ok=True)
+			gdown.download(id='1zIpguXWZRlYLVXWD9JOgEqCduK4Op5SA', output=self.init_weight, quiet=True)
 
 		ckpt_state_dict = torch.load(self.init_weight)
 		self.load_state_dict(ckpt_state_dict)

@@ -1,3 +1,4 @@
+import torch
 from model.denoise.denoise import main as denoise
 from model.asd.perform_asd import main as perform_asd
 from model.avd.extract_faces import main as extract_faces
@@ -11,6 +12,13 @@ from model.asd.visualize_asd import main as visualize_asd
 # TODO: Implement this process for unnanotated videos.
 if __name__=='__main__':
 	data_type = 'val'
+
+	print('\n\n0- SANITY CHECK')
+	print(f'CUDA available: {torch.cuda.is_available()}')
+	print(f'Device count:   {torch.cuda.device_count()}')
+	print(f'Current Device: {torch.cuda.current_device()}')
+	print(f'Device name:    {torch.cuda.get_device_name(torch.cuda.current_device())}')
+
 
 	print('\n\n1- DENOISE WAVES')
 	# for denoiser in ['noisereduce', 'dihard18']:

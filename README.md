@@ -4,15 +4,6 @@
 
 ## Dependencies ##
 
-Start from building the environment
-
-conda create -n TalkNet python=3.12.2 anaconda
-conda activate TalkNet
-pip install -r requirement.txt
-
-Start from the existing environment
-
-pip install -r requirement.txt
 
 ## Dataset ##
 

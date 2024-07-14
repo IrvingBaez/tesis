@@ -67,7 +67,8 @@ class AudioEncoder(nn.Module):
 				nn.init.constant_(m.bias, 0)
 
 		if not os.path.isfile(self.init_weight):
-			gdown.download('1RI_mUBiyKf3sT-UXDvG7ogsqcFGnnnQp', self.init_weight, quiet=True)
+			os.makedirs(self.init_weight.rsplit('/', 1)[0], exist_ok=True)
+			gdown.download(id='1RI_mUBiyKf3sT-UXDvG7ogsqcFGnnnQp', output=self.init_weight, quiet=True)
 
 		ckpt_state_dict = torch.load(self.init_weight)
 		self.load_state_dict(ckpt_state_dict)

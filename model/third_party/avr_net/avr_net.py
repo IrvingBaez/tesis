@@ -19,7 +19,8 @@ class AVRNET(pl.LightningModule):
 		self.relation_layer	= RelationLayer(self.config['relation'])
 
 		if not os.path.isfile(self.config['checkpoint']):
-			gdown.download('1qX-Azl6KkuJv9DdQgIQ9GlpP3111RK2b', self.config['checkpoint'], quiet=True)
+			os.makedirs(self.config['checkpoint'].rsplit('/', 1)[0], exist_ok=True)
+			gdown.download(id='1qX-Azl6KkuJv9DdQgIQ9GlpP3111RK2b', output=self.config['checkpoint'], quiet=True)
 
 		ckpt_state_dict = torch.load(self.config['checkpoint'])
 
