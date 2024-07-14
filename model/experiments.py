@@ -35,30 +35,30 @@ if __name__=='__main__':
 	# 	align_faces(asd_detector=asd_detector)
 
 	print('\n\n6- TRAINING AUDIO VISUAL DIARIZATION')
-	# params = {'denoiser': 'dihard18', 'vad_detector': 'ground_truth', 'asd_detector': 'ground_truth', 'avd_detector': 'avr_net', 'aligned': True}
+	params = {'denoiser': 'dihard18', 'vad_detector': 'ground_truth', 'asd_detector': 'ground_truth', 'avd_detector': 'avr_net', 'aligned': True}
 
-	# train_avd(**params)
+	train_avd(**params)
 
 
 	print('\n\n6- AUDIO VISUAL DIARIZATION')
-	avd_tests = []
-	for vad_detector in ['ground_truth', 'dihard18']:
-		for asd_detector in ['ground_truth', 'light_asd', 'talk_net']:
-			for denoiser in ['dihard18', 'noisereduce', 'original']:
-				for aligned in [False, True]:
-					avd_tests.append({
-						'data_type': 		data_type,
-						'denoiser': 		denoiser,
-						'vad_detector': vad_detector,
-						'asd_detector': asd_detector,
-						'aligned': 			aligned,
-						'avd_detector': 'avr_net'
-					})
+	# avd_tests = []
+	# for vad_detector in ['ground_truth', 'dihard18']:
+	# 	for asd_detector in ['ground_truth', 'light_asd', 'talk_net']:
+	# 		for denoiser in ['dihard18', 'noisereduce', 'original']:
+	# 			for aligned in [False, True]:
+	# 				avd_tests.append({
+	# 					'data_type': 		data_type,
+	# 					'denoiser': 		denoiser,
+	# 					'vad_detector': vad_detector,
+	# 					'asd_detector': asd_detector,
+	# 					'aligned': 			aligned,
+	# 					'avd_detector': 'avr_net'
+	# 				})
 
-	for params in avd_tests:
-		print(params)
-		perform_avd(**params)
-		print('')
+	# for params in avd_tests:
+	# 	print(params)
+	# 	perform_avd(**params)
+	# 	print('')
 
 
 	# print('\n\n7- VISUALIZATION')

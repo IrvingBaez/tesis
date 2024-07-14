@@ -3,12 +3,15 @@ import torch
 
 class TrainCollator:
 	def __call__(self, batch):
-		new_batch = []
+		result = []
 		for group in batch:
-			flat_group = flatten_list(group)
-			new_batch.append(add_fields(flat_group))
+			flat_batch = flatten_list(group)
 
-		return new_batch
+			result.append(add_fields(flat_batch))
+
+		result = add_fields(result)
+
+		return result
 
 
 def flatten_list(nested_list):
@@ -40,8 +43,6 @@ def add_fields(data_list):
 		if isinstance(data_list[0][field], dict):
 			result[field] = load_dict(result[field])
 
-	result['frames'] = result['frames'].reshape((len(data_list), 1, 3, 1, 112, 112))
-	result['audio'] = result['audio'].reshape((len(data_list), 1, 32000))
 	return result
 
 

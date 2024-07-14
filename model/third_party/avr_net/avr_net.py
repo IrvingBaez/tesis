@@ -22,6 +22,10 @@ class AVRNET(pl.LightningModule):
 			gdown.download('1qX-Azl6KkuJv9DdQgIQ9GlpP3111RK2b', self.config['checkpoint'], quiet=True)
 
 		ckpt_state_dict = torch.load(self.config['checkpoint'])
+
+		if 'model_state_dict' in ckpt_state_dict:
+			ckpt_state_dict = ckpt_state_dict['model_state_dict']
+
 		self.load_state_dict(ckpt_state_dict, strict=True)
 
 

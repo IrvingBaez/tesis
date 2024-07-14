@@ -316,11 +316,15 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--labs_path',		type=str,	help='Path to the lab files with voice activity detection info')
 	parser.add_argument('--frames_path',	type=str,	help='Path to the face frames already cropped and aligned')
 	parser.add_argument('--tracks_path',	type=str,	help='Path to the csv files containing the active speaker detection info')
+	parser.add_argument('--weights_path', type=str,	help='Path to the weights to be used for training', default=None)
 	parser.add_argument('--sys_path',			type=str,	help='Path to the folder where to save all the system outputs')
 
 	args = argparse_helper(parser, **kwargs)
 
 	args.video_ids = args.video_ids.split(',')
+
+	if args.weights_path is not None:
+		CONFIG['checkpoint'] = args.weights_path
 
 	return args
 

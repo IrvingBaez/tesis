@@ -22,6 +22,8 @@ def train_avd_predictor(args):
 		train_avr_net(**arguments)
 
 		arguments['video_ids'] = ','.join(args.val_video_ids)
+		arguments['weights_path'] = sorted(glob('checkpoints/*.ckpt'))[-1]
+		del arguments['rttms_path']
 		val_avr_net(**arguments)
 
 	score_avd_validation(args)

@@ -1,6 +1,5 @@
 import argparse, os
 import model.util as util
-from glob import glob
 from datetime import datetime
 from model.avd.score_avd import main as score_avd
 

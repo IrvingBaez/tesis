@@ -1,5 +1,12 @@
-import torch
+import torch, os
+from torch.optim.adam import Adam
+from torch.optim.lr_scheduler import LambdaLR
+from datetime import datetime
+from tqdm.auto import tqdm
+
+from .scheduler import MultiStepScheduler
 from .timer import Timer
+from .losses import MSELoss
 
 
 class Trainer:
@@ -15,6 +22,13 @@ class Trainer:
 		self.current_updates = 0
 		self.current_epoch = 0
 
+		self.loss_function = MSELoss()
+		self.scaler = torch.cuda.amp.GradScaler(enabled=False)
+
+		optimizer_params = self._get_optimizer_params()
+		self.optimizer = Adam(optimizer_params, lr=0.0005, weight_decay=0.0001)
+		self.scheduler = MultiStepScheduler(self.optimizer)
+
 		# TODO: set False after finishing debugging.
 		torch.autograd.set_detect_anomaly(True)
 
@@ -23,17 +37,60 @@ class Trainer:
 		self.run_training_epoch()
 
 	def run_training_epoch(self) -> None:
-		while self.current_updates < self.max_updates:
+		while self.current_updates < self.max_updates and self.current_epoch < self.max_epochs:
 			self.current_epoch += 1
+			self.optimizer.zero_grad()
 
-			for index, batch in enumerate(self.dataloader):
-				batch['frames'] = batch['frames'].transpose(0, 1)
-				batch['frames'] = batch['frames'].to(self.model.device)
-
-				batch['audio'] = batch['audio'].transpose(0, 1)
-				batch['audio'] = batch['audio'].to(self.model.device)
-
-				batch['targets'] = batch['targets'].to(self.model.device)
-
+			losses = []
+			for batch in tqdm(self.dataloader, desc='Training'):
+				batch = self._mount_batch(batch)
 				model_output = self.model(batch, exec='train')
-				print(model_output)
+
+				batch.update(model_output)
+				batch['loss'] = self.loss_function(batch['scores'], batch['targets'])
+				losses.append(batch['loss'])
+
+				self.scaler.scale(batch['loss']).backward()
+				self._detatch_batch(batch)
+
+				self.scaler.step(self.optimizer)
+				self.scaler.update()
+				self.current_updates += 1
+				self.scheduler.step()
+
+			self._save_checkpoint(losses)
+
+
+	def _mount_batch(self, batch):
+		batch['frames'] = batch['frames'].to(self.model.device)
+		batch['audio'] = batch['audio'].to(self.model.device)
+		batch['targets'] = batch['targets'].to(self.model.device)
+
+		return batch
+
+
+	def _detatch_batch(self, batch):
+		for value in batch.values():
+			if isinstance(value, torch.Tensor):
+				value.detach()
+
+
+	def _get_optimizer_params(self):
+		parameters = list(self.model.parameters())
+		parameters = [{"params": parameters}]
+
+		return parameters
+
+
+	def _save_checkpoint(self, losses):
+		os.makedirs('checkpoints', exist_ok=True)
+
+		timestamp = datetime.now().strftime('%Y_%b_%d_%H:%M:%S')
+		save_path = f'checkpoints/training_{timestamp}.ckpt'
+
+		torch.save({
+			'epoch': self.current_epoch,
+			'model_state_dict': self.model.state_dict(),
+			'optimizer_state_dict': self.optimizer.state_dict(),
+			'losses': losses
+		}, save_path)

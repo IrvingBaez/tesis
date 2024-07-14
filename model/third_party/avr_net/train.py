@@ -4,7 +4,6 @@ import numpy as np
 
 from .tools.predict_collator import PredictCollator
 from .tools.train_collator import TrainCollator
-from .tools.ahc_cluster import AHC_Cluster
 from .tools.train_dataset import TrainDataset
 from .tools.train_sampler import TrainSampler
 from .tools.trainer import Trainer
@@ -12,8 +11,6 @@ from .avr_net import AVRNET
 from model.util import argparse_helper
 from shutil import rmtree
 from torch.utils.data.dataloader import DataLoader
-from tqdm import tqdm
-from glob import glob
 
 
 CONFIG = {
@@ -59,7 +56,7 @@ def train(args):
 
 	sampler = TrainSampler(dataset)
 
-	dataloader = DataLoader(dataset, batch_size=1, num_workers=2, pin_memory=True, drop_last=False, collate_fn=PredictCollator(), sampler=sampler)
+	dataloader = DataLoader(dataset, batch_size=4, num_workers=2, pin_memory=True, drop_last=False, collate_fn=TrainCollator(), sampler=sampler)
 	trainer = Trainer(model, dataloader)
 
 	trainer.train()
@@ -93,13 +90,17 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--labs_path',		type=str,	help='Path to the lab files with voice activity detection info')
 	parser.add_argument('--frames_path',	type=str,	help='Path to the face frames already cropped and aligned')
 	parser.add_argument('--tracks_path',	type=str,	help='Path to the csv files containing the active speaker detection info')
-	parser.add_argument('--rttms_path',		type=str,	help='Path to the rttm files containing detection ground truth')
+	parser.add_argument('--rttms_path', 	type=str,	help='Path to the rttm files containing detection ground truth')
+	parser.add_argument('--weights_path', type=str,	help='Path to the weights to be used for training', default=None)
 	parser.add_argument('--sys_path',			type=str,	help='Path to the folder where to save all the system outputs')
 
 	args = argparse_helper(parser, **kwargs)
 
 	args.data_type = 'train'
 	args.video_ids = args.video_ids.split(',')
+
+	if args.weights_path is not None:
+		CONFIG['checkpoint'] = args.weights_path
 
 	return args
 
