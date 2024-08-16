@@ -15,7 +15,7 @@ def main():
 		cmd = f'wget -P {save_dir} https://s3.amazonaws.com/ava-dataset/trainval/{video.strip()}'
 		subprocess.call(cmd, shell=True)
 
-	gdown.download('1MZIfZRLug1t2o3I8tReC8eTu9V76mtHi')
+	# gdown.download('1MZIfZRLug1t2o3I8tReC8eTu9V76mtHi')
 
 
 if __name__ == '__main__':

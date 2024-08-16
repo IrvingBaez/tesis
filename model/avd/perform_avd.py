@@ -30,10 +30,11 @@ def score_avd_validation(args):
 	with open(score_path, 'r') as file:
 		scores = file.read()
 
-	os.makedirs(f'results', exist_ok=True)
+	save_dir = 'model/third_party/avr_net/results'
+	os.makedirs(save_dir, exist_ok=True)
 
 	timestamp = datetime.now().strftime('%Y_%b_%d_%H:%M:%S')
-	with open(f'results/{timestamp}.out', 'w') as file:
+	with open(f'{save_dir}/{timestamp}.out', 'w') as file:
 		file.write(f'data_type:    {args.data_type}\n')
 		file.write(f'denoiser:     {args.denoiser}\n')
 		file.write(f'vad_detector: {args.vad_detector}\n')
@@ -42,6 +43,7 @@ def score_avd_validation(args):
 		file.write(f'aligned:      {args.aligned}\n\n')
 		file.write(scores)
 
+	print(scores.split('\n')[-1])
 
 def initialize_arguments(**kwargs):
 	parser = argparse.ArgumentParser(description = "Arguments for data preprocessing")

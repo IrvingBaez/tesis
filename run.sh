@@ -1,5 +1,9 @@
+#!/bin/bash
+set -eu
+
 env_name='tesis'
 
+source ~/miniconda3/etc/profile.d/conda.sh
 eval "$(conda shell.bash hook)"
 conda activate ${env_name}
 

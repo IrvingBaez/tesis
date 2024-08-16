@@ -1,13 +1,10 @@
-# Created during development
-.ipynb_checkpoints
-.vscode
-
 # Downloadable dataset
 dataset/videos/
 dataset/waves/
 dataset/vad/
 dataset/asd/
 dataset/avd/
+dataset/face_clips/
 
 # Downloadable model
 *.pth
@@ -18,10 +15,10 @@ dataset/avd/
 *.pckl
 *.out
 *.sad
+!db_items.pckl
 
 # Not part of the project
-*.ipynb
-protocolo/
-
 __pycache__/
 *.py[cod]
+.ipynb_checkpoints
+.vscode

@@ -5,7 +5,7 @@ from datetime import datetime
 from model.avd.score_avd import main as score_avd
 
 from model.third_party.avr_net.train import main as train_avr_net
-from model.third_party.avr_net.predict import main as val_avr_net
+from model.third_party.avr_net.predict import main as predict
 
 
 def train_avd_predictor(args):
@@ -21,32 +21,41 @@ def train_avd_predictor(args):
 		}
 		train_avr_net(**arguments)
 
+		arguments['data_type'] = args.val_data_type
 		arguments['video_ids'] = ','.join(args.val_video_ids)
-		arguments['weights_path'] = sorted(glob('checkpoints/*.ckpt'))[-1]
+		arguments['weights_path'] = sorted(glob('model/third_party/avr_net/checkpoints/*.ckpt'))[-1]
 		del arguments['rttms_path']
-		val_avr_net(**arguments)
+		predict(**arguments)
 
-	score_avd_validation(args)
+	args.weights = arguments['weights_path']
+	score = score_avd_validation(args)
+	print(f'DER: {score}')
+	return score
 
 
 def score_avd_validation(args):
-	score_avd(data_type=args.data_type, avd_detector=args.avd_detector)
+	score_avd(data_type=args.val_data_type, avd_detector=args.avd_detector)
 
 	score_path = util.get_path('avd_path', avd_detector = args.avd_detector) + '/scores.out'
 	with open(score_path, 'r') as file:
 		scores = file.read()
 
-	os.makedirs(f'results', exist_ok=True)
+	save_dir = 'model/third_party/avr_net/results'
+	os.makedirs(save_dir, exist_ok=True)
 
 	timestamp = datetime.now().strftime('%Y_%b_%d_%H:%M:%S')
-	with open(f'results/{timestamp}.out', 'w') as file:
+	with open(f'{save_dir}/{timestamp}.out', 'w') as file:
 		file.write(f'data_type:    {args.data_type}\n')
 		file.write(f'denoiser:     {args.denoiser}\n')
 		file.write(f'vad_detector: {args.vad_detector}\n')
 		file.write(f'asd_detector: {args.asd_detector}\n')
 		file.write(f'avd_detector: {args.avd_detector}\n')
-		file.write(f'aligned:      {args.aligned}\n\n')
+		file.write(f'aligned:      {args.aligned}\n')
+		file.write(f'weights:      {args.weights}\n\n')
 		file.write(scores)
+
+	summary = scores.split('\n')[-1]
+	return float(summary.split()[3])
 
 
 def initialize_arguments(**kwargs):
@@ -61,6 +70,7 @@ def initialize_arguments(**kwargs):
 	args = util.argparse_helper(parser, **kwargs)
 
 	args.data_type = 'train'
+	args.val_data_type = 'val'
 
 	with open(f'dataset/split/{args.data_type}.list', 'r') as file:
 		args.video_ids = file.read().split('\n')
@@ -84,7 +94,7 @@ def initialize_arguments(**kwargs):
 
 def main(**kwargs):
 	args = initialize_arguments(**kwargs, not_empty=True)
-	train_avd_predictor(args)
+	return train_avd_predictor(args)
 
 
 if __name__ == '__main__':

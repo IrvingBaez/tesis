@@ -163,12 +163,12 @@ class CustomDataset(Dataset):
 				items = []
 				timestamps = np.sort(np.array(list(faces.keys())))
 
-				# Splits segments if they are too long (0.5s), skips them if they are too short (0.2s)
+				# Splits segments if they are too long (2.0s), skips them if they are too short (0.2s)
 				for seg_start in np.arange(start, end, step):
 					if seg_start < offset: seg_start = offset
 					duration = round(min(maxs, end - seg_start), 6)
 
-					if start + duration > offset + 300.0: continue
+					if seg_start + duration > offset + 300.0: continue
 					if duration < mins: continue
 
 					segment_timestamps = timestamps[np.searchsorted(timestamps, seg_start) : np.searchsorted(timestamps, round(seg_start+duration, 6))]

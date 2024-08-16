@@ -83,7 +83,7 @@ class TrainDataset(Dataset):
 
 		audiosize = audio.shape[0]
 		if audiosize == 0:
-			raise RuntimeError('Audio length is zero, check the file')
+			raise RuntimeError(f'Audio length is zero, check the file {item[0]}. With item: {item}')
 
 		max_audio = self._max_frames * int(sample_rate / 100)
 
@@ -173,12 +173,13 @@ class TrainDataset(Dataset):
 				items = []
 				timestamps = np.sort(np.array(list(faces[spk_id].keys())))
 
-				# Splits segments if they are too long (0.5s), skips them if they are too short (0.2s)
+				# Splits segments if they are too long (2.0s), skips them if they are too short (0.2s)
 				for seg_start in np.arange(start, end, step):
 					if seg_start < offset: seg_start = offset
 					duration = round(min(maxs, end - seg_start), 6)
 
-					if start + duration > offset + 300.0: continue
+					if seg_start + duration > offset + 300.0: continue
+					if duration < mins: continue
 
 					segment_timestamps = timestamps[np.searchsorted(timestamps, seg_start) : np.searchsorted(timestamps, round(seg_start+duration, 6))]
 					image_paths = [faces[spk_id][timestamp] for timestamp in segment_timestamps]

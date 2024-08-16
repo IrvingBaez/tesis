@@ -1,4 +1,8 @@
+#!/bin/bash
+set -eu
+
 env_name='tesis'
+source ~/miniconda3/etc/profile.d/conda.sh
 
 if conda info --envs | grep -q ${env_name}
 then
