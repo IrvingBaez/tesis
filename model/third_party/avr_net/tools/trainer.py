@@ -10,11 +10,12 @@ from .losses import MSELoss
 
 
 class Trainer:
-	def __init__(self, model, dataloader) -> None:
+	def __init__(self, model, device, dataloader) -> None:
 		self.train_timer = Timer()
 		self.validation_timer = Timer()
 
 		self.model = model
+		self.device = device
 		self.dataloader = dataloader
 		self.max_updates = 60_000
 		self.max_epochs = self.max_updates / len(dataloader)
@@ -47,6 +48,7 @@ class Trainer:
 
 		self.run_training_loop()
 
+
 	def run_training_loop(self) -> None:
 		train_pb = tqdm(total=self.max_updates, desc='Training', initial=self.current_updates)
 
@@ -77,9 +79,9 @@ class Trainer:
 
 
 	def _mount_batch(self, batch):
-		batch['frames'] = batch['frames'].to(self.model.device)
-		batch['audio'] = batch['audio'].to(self.model.device)
-		batch['targets'] = batch['targets'].to(self.model.device)
+		batch['frames'] = batch['frames'].to(self.device)
+		batch['audio'] = batch['audio'].to(self.device)
+		batch['targets'] = batch['targets'].to(self.device)
 
 		return batch
 

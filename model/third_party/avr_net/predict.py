@@ -1,5 +1,6 @@
 import torch, argparse, pickle, os
 import numpy as np
+import torch.nn as nn
 
 from model.third_party.avr_net.tools.predict_collator import PredictCollator
 from model.third_party.avr_net.tools.ahc_cluster import AHC_Cluster
@@ -66,10 +67,11 @@ def load_model():
 	# LOAD MODEL TO GPU
 	if torch.cuda.is_available():
 		device = torch.device("cuda")
-		torch.cuda.set_device(0)
+		# torch.cuda.set_device(0)
 	else:
 		device = torch.device("cpu")
 
+	model= nn.DataParallel(model)
 	model.to(device)
 
 	return model

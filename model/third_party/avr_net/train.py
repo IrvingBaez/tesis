@@ -1,6 +1,6 @@
 import torch, argparse, pickle, os
 import numpy as np
-
+import torch.nn as nn
 
 from .tools.predict_collator import PredictCollator
 from .tools.train_collator import TrainCollator
@@ -48,7 +48,7 @@ def train(args):
 	os.makedirs(args.sys_path)
 	os.makedirs(f'{args.sys_path}/features')
 
-	model = load_model()
+	model, device = load_model()
 	model.train()
 
 	dataset = TrainDataset(args)
@@ -57,7 +57,7 @@ def train(args):
 	sampler = TrainSampler(dataset)
 
 	dataloader = DataLoader(dataset, batch_size=6, num_workers=2, pin_memory=True, drop_last=False, collate_fn=TrainCollator(), sampler=sampler)
-	trainer = Trainer(model, dataloader)
+	trainer = Trainer(model, device, dataloader)
 
 	trainer.train(CONFIG['checkpoint'])
 
@@ -72,13 +72,14 @@ def load_model():
 	# LOAD MODEL TO GPU
 	if torch.cuda.is_available():
 		device = torch.device("cuda")
-		torch.cuda.set_device(0)
+		# torch.cuda.set_device(0)
 	else:
 		device = torch.device("cpu")
 
+	model= nn.DataParallel(model)
 	model.to(device)
 
-	return model
+	return model, device
 
 
 def initialize_arguments(**kwargs):
