@@ -6,7 +6,7 @@ components = {
 	'denoiser': 			['original', 'dihard18', 'noisereduce'],
 	'vad_detector':		['ground_truth', 'dihard18'],
 	'asd_detector':		['ground_truth', 'light_asd', 'talk_net'],
-	'avd_detector':		['ground_truth', 'avr_net'],
+	'avd_detector':		['ground_truth', 'avr_net', 'avar_net'],
 }
 
 def get_path(request, data_type='test', denoiser='original', vad_detector='ground_truth', asd_detector='ground_truth', avd_detector='avr_net'):

@@ -56,10 +56,10 @@ def train(args):
 
 	sampler = TrainSampler(dataset)
 
-	dataloader = DataLoader(dataset, batch_size=4, num_workers=2, pin_memory=True, drop_last=False, collate_fn=TrainCollator(), sampler=sampler)
+	dataloader = DataLoader(dataset, batch_size=6, num_workers=2, pin_memory=True, drop_last=False, collate_fn=TrainCollator(), sampler=sampler)
 	trainer = Trainer(model, dataloader)
 
-	trainer.train()
+	trainer.train(CONFIG['checkpoint'])
 
 	rmtree(f'{args.sys_path}/features')
 

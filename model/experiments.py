@@ -1,13 +1,13 @@
 import torch
-from model.denoise.denoise import main as denoise
-from model.asd.perform_asd import main as perform_asd
-from model.avd.extract_faces import main as extract_faces
+
 from model.avd.align_faces import main as align_faces
+from model.avd.extract_faces import main as extract_faces
+from model.asd.perform_asd import main as perform_asd
 from model.avd.perform_avd import main as perform_avd
 from model.avd.train_avd_predictor import main as train_avd
-from model.util import get_path
 from model.asd.visualize_asd import main as visualize_asd
-
+from model.denoise.denoise import main as denoise
+from model.util import get_path
 
 # TODO: Implement this process for unnanotated videos.
 if __name__=='__main__':
@@ -39,7 +39,7 @@ if __name__=='__main__':
 	# 	extract_faces(data_type=data_type, asd_detector=asd_detector)
 
 	print('\n\n5- FACE ALIGN')
-	# for asd_detector in ['ground_truth', 'light_asd', 'talk_net']:
+	# for asd_detector in ['ground_truth']:#, 'light_asd', 'talk_net']:
 	# 	align_faces(asd_detector=asd_detector)
 
 	print('\n\n6- TRAINING AUDIO VISUAL DIARIZATION')
@@ -48,28 +48,28 @@ if __name__=='__main__':
 	train_avd(**params)
 
 
-	print('\n\n6- AUDIO VISUAL DIARIZATION')
-	# avd_tests = []
-	# for vad_detector in ['ground_truth', 'dihard18']:
-	# 	for asd_detector in ['ground_truth', 'light_asd', 'talk_net']:
-	# 		for denoiser in ['dihard18', 'noisereduce', 'original']:
-	# 			for aligned in [False, True]:
-	# 				avd_tests.append({
-	# 					'data_type': 		data_type,
-	# 					'denoiser': 		denoiser,
-	# 					'vad_detector': vad_detector,
-	# 					'asd_detector': asd_detector,
-	# 					'aligned': 			aligned,
-	# 					'avd_detector': 'avr_net'
-	# 				})
+	print('\n\n7- AUDIO VISUAL DIARIZATION')
+	avd_tests = []
+	for vad_detector in ['ground_truth']:#, 'dihard18']:
+		for asd_detector in ['ground_truth']:#, 'light_asd', 'talk_net']:
+			for denoiser in ['dihard18']:#, 'noisereduce', 'original']:
+				for aligned in [False]: # False]:
+					avd_tests.append({
+						'data_type': 		data_type,
+						'denoiser': 		denoiser,
+						'vad_detector': vad_detector,
+						'asd_detector': asd_detector,
+						'aligned': 			aligned,
+						'avd_detector': 'avr_net'
+					})
 
-	# for params in avd_tests:
-	# 	print(params)
-	# 	perform_avd(**params)
-	# 	print('')
+	for params in avd_tests:
+		print(params)
+		perform_avd(**params)
+		print('')
 
 
-	# print('\n\n7- VISUALIZATION')
+	# print('\n\n8- VISUALIZATION')
 	# visualize_asd(
 	# 	video_path='dataset/videos/1j20qq1JyX4_01.mp4',
 	# 	csv_path='dataset/asd/ground_truth/predictions/1j20qq1JyX4_01.csv',

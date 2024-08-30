@@ -14,15 +14,15 @@ class CustomDataset(Dataset):
 	# DATASET CONFIG: {'data_dir': './dataset/', 'max_frame': 200, 'min_frame': 20, 'step_frame': 50, 'snippet_length': 1, 'missing_rate': 0, 'processors': {'face_pad_processor': {'type': 'face_pad', 'params': {'length': 1}}, 'face_to_tensor_processor': {'type': 'face_to_tensor', 'params': {}}, 'face_resize_processor': {'type': 'face_resize', 'params': {'dest_size': [112, 112]}}, 'face_normalize_processor': {'type': 'face_normalize', 'params': {'mean': 0.5, 'std': 0.5}}, 'audio_normalize_processor': {'type': 'audio_normalize', 'params': {'desired_rms': 0.1, 'eps': 0.0001}}, 'audio_to_tensor_processor': {'type': 'audio_to_tensor', 'params': {}}}, 'sampler': {}}
 	def __init__(self, args):
 		super().__init__()
-		self.batch_size = 10
 		self.snippet_length = 1
 		self._max_frames = 200
 		self._min_frames = 20
 		self._step_frame = 50
-		self._missing_rate = 0
+		# self.batch_size = 10
+		# self._missing_rate = 0
 
+		# self.videos_path	= args.videos_path
 		self.video_ids		= args.video_ids
-		self.videos_path	= args.videos_path
 		self.waves_path		= args.waves_path
 		self.labs_path		= args.labs_path
 		self.frames_path	= args.frames_path

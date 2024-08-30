@@ -18,17 +18,15 @@ class AVRNET(pl.LightningModule):
 		self.video_encoder	= VideoEncoder(self.config['video'])
 		self.relation_layer	= RelationLayer(self.config['relation'])
 
+		# TODO: Load all other params and update optimizer
 		if not os.path.isfile(self.config['checkpoint']):
 			os.makedirs(self.config['checkpoint'].rsplit('/', 1)[0], exist_ok=True)
 			gdown.download(id='1qX-Azl6KkuJv9DdQgIQ9GlpP3111RK2b', output=self.config['checkpoint'], quiet=True)
 
-		ckpt_state_dict = torch.load(self.config['checkpoint'])
+		model_checkpoint = torch.load(self.config['checkpoint'])
 		print(f'Using checkpoint at: {self.config['checkpoint']}')
 
-		if 'model_state_dict' in ckpt_state_dict:
-			ckpt_state_dict = ckpt_state_dict['model_state_dict']
-
-		self.load_state_dict(ckpt_state_dict, strict=True)
+		self.load_state_dict(model_checkpoint['model_state_dict'], strict=True)
 
 
 	def train(self, mode=True):

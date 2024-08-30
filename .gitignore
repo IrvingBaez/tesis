@@ -15,7 +15,6 @@ dataset/face_clips/
 *.pckl
 *.out
 *.sad
-!db_items.pckl
 
 # Not part of the project
 __pycache__/

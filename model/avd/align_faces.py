@@ -1,16 +1,17 @@
 import torch.multiprocessing as multiprocessing
 multiprocessing.set_start_method('spawn', force=True)
 
-import argparse, cv2, os
-from model import util
+import argparse
+import cv2
+import os
+
 from glob import glob
+from model import util
+from retinaface import RetinaFace
 from tqdm.auto import tqdm
 from tqdm.contrib.concurrent import process_map
-from model.third_party.RetinaFace.face_aligner import face_aligner
-
 
 def align_faces(args):
-	aligner = face_aligner()
 	tasks = []
 
 	for video_id in tqdm(args.video_ids, desc='Registering tasks', leave=False):
@@ -24,28 +25,28 @@ def align_faces(args):
 			target_path = f'{target_folder}/{frame_name}'
 
 			if not os.path.isfile(target_path):
-				tasks.append((frame_path, target_path, aligner))
+				tasks.append((frame_path, target_path))
 
 	process_map(align_frame, tasks, max_workers=args.n_threads, chunksize=10)
 
 
 def align_frame(data):
-	frame_path, target_path, aligner = data
+	frame_path, target_path = data
 
-	frame = cv2.imread(frame_path)
-	aligned_frame = aligner.align_face(frame)
+	face = cv2.imread(frame_path)
+	detections = RetinaFace.extract_faces(img_path=frame_path, threshold=0.8, align=True)
 
-	if aligned_frame is not None:
-		frame = aligned_frame
+	if detections:
+		face = cv2.resize(detections[0], (224, 224))
 
-	cv2.imwrite(target_path, frame)
+	cv2.imwrite(target_path, face)
 
 
 def initialize_arguments(**kwargs):
 	parser = argparse.ArgumentParser(description = "Arguments for face alignment")
 
 	parser.add_argument('--asd_detector', type=str, default="ground_truth", help='Name of folder containing tracks to use in processing')
-	parser.add_argument('--n_threads',  	type=int, default=6, 							help='Number of threads for preprocessing')
+	parser.add_argument('--n_threads',  	type=int, default=4, 							help='Number of threads for preprocessing')
 
 	args = util.argparse_helper(parser, **kwargs)
 

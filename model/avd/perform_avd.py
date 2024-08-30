@@ -4,21 +4,24 @@ from datetime import datetime
 from model.avd.score_avd import main as score_avd
 
 from model.third_party.avr_net.predict import main as avr_net
-
+from model.third_party.avar_net.predict import main as avar_net
 
 def perform_avd(args):
+	arguments = {
+		'data_type':		args.data_type,
+		'video_ids':		','.join(args.video_ids),
+		'videos_path':	args.videos_path,
+		'waves_path': 	args.waves_path,
+		'labs_path': 		args.labs_path,
+		'frames_path': 	args.frames_path,
+		'tracks_path': 	args.tracks_path,
+		'sys_path': 		args.sys_path
+	}
+
 	if args.avd_detector == 'avr_net':
-		arguments = {
-			'data_type':		args.data_type,
-			'video_ids':		','.join(args.video_ids),
-			'videos_path':	args.videos_path,
-			'waves_path': 	args.waves_path,
-			'labs_path': 		args.labs_path,
-			'frames_path': 	args.frames_path,
-			'tracks_path': 	args.tracks_path,
-			'sys_path': 		args.sys_path
-		}
 		avr_net(**arguments)
+	if args.avd_detector == 'avar_net':
+		avar_net(**arguments)
 
 	score_avd_validation(args)
 

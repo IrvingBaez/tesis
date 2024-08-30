@@ -15,6 +15,7 @@ def main():
 		cmd = f'wget -P {save_dir} https://s3.amazonaws.com/ava-dataset/trainval/{video.strip()}'
 		subprocess.call(cmd, shell=True)
 
+	# TODO: Replace by actual database, unzip in correct folder
 	# gdown.download('1MZIfZRLug1t2o3I8tReC8eTu9V76mtHi')
 
 
