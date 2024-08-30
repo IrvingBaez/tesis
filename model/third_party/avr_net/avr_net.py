@@ -18,7 +18,6 @@ class AVRNET(pl.LightningModule):
 		self.video_encoder	= VideoEncoder(self.config['video'])
 		self.relation_layer	= RelationLayer(self.config['relation'])
 
-		# TODO: Load all other params and update optimizer
 		if not os.path.isfile(self.config['checkpoint']):
 			os.makedirs(self.config['checkpoint'].rsplit('/', 1)[0], exist_ok=True)
 			gdown.download(id='1qX-Azl6KkuJv9DdQgIQ9GlpP3111RK2b', output=self.config['checkpoint'], quiet=True)
