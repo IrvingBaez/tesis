@@ -7,6 +7,8 @@
 #SBATCH --mail-user="irvingbaezc@gmail.com" #email for reporting
 #SBATCH --mail-type=ALL #report types
 
+set -eu
+
 source /etc/profile.d/modules.sh
 module purge
 module load conda
