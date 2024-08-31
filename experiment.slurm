@@ -22,5 +22,7 @@ export NO_ALBUMENTATIONS_UPDATE=1
 export PYTHONPATH=$PWD
 export CUDA_VISIBLE_DEVICES=0 #,1,2,3
 
-python3 model/experiments.py
+# python3 model/experiments.py
+python3 model/tools/der_and_losses.py
+
 /bin/hostname # print used node

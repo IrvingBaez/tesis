@@ -49,11 +49,11 @@ def predict(args):
 	os.makedirs(f'{args.sys_path}/features')
 	os.makedirs(f'{args.sys_path}/predictions')
 
-	model = load_model()
+	model, device = load_model()
 	model.eval()
 
 	with torch.no_grad():
-		extract_features(model, args)
+		extract_features(model, device, args)
 		cluster_features(model, args)
 
 	rmtree(f'{args.sys_path}/features')
@@ -74,10 +74,10 @@ def load_model():
 	model= nn.DataParallel(model)
 	model.to(device)
 
-	return model
+	return model, device
 
 
-def extract_features(model, args):
+def extract_features(model, device, args):
 	# LOAD DATA
 	dataset = CustomDataset(args)
 	dataset.load_dataset()
@@ -94,8 +94,8 @@ def extract_features(model, args):
 
 	n = 0
 	for batch in dataloader:
-		batch['frames'] = batch['frames'].to(model.device)
-		batch['audio'] = batch['audio'].to(model.device)
+		batch['frames'] = batch['frames'].to(device)
+		batch['audio'] = batch['audio'].to(device)
 
 		model_output = model(batch, exec='extraction')
 

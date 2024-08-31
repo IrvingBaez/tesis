@@ -13,4 +13,9 @@ export TF_USE_LEGACY_KERAS=1
 export PYTHONPATH=$PWD
 export CUDA_VISIBLE_DEVICES=0
 
-python3 model/experiments.py
+program="model/experiments.py"
+if [ "$#" -gt 0 ]; then
+    program="$@"
+fi
+
+python3 $program
