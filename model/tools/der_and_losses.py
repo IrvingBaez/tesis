@@ -56,7 +56,8 @@ def score_args():
 def collect_losses(args):
 	epochs = []
 	losses = []
-	for epoch, path in tqdm(enumerate(args.checkpoint_paths), total=len(args.checkpoint_paths)):
+
+	for path in tqdm(args.checkpoint_paths):
 		checkpoint = torch.load(path)
 
 		epoch_losses = []
@@ -68,7 +69,7 @@ def collect_losses(args):
 			epoch_losses.append(value.cpu().detach().numpy()[0])
 
 		avg_loss = sum(epoch_losses) / len(epoch_losses)
-		epochs.append(epoch)
+		epochs.append(checkpoint['epoch'])
 		losses.append(avg_loss)
 
 	return epochs, losses
@@ -101,7 +102,7 @@ def der_and_losses(args):
 	plt.plot(epochs, losses, label = "losses")
 	plt.legend()
 
-	plt.savefig(f'{args.outs_path}/der_and_losses.png')
+	plt.savefig(f'{args.outs_path}/der_and_losses.jpg')
 
 
 def initialize_arguments(**kwargs):

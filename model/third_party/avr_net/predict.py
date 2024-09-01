@@ -178,7 +178,10 @@ def compute_similarity(model, args):
 		batch = []
 		similarity = torch.diag_embed(torch.ones([utterance_count]))
 
-		for i in tqdm(range(utterance_count), leave=False, desc=f'Processing {utterance_count} utterances'):
+		total_elements = int((utterance_count * (utterance_count - 1)) / 2)
+		progress_bar = tqdm(range(total_elements), leave=False, desc=f'Processing {utterance_count} utterances')
+
+		for i in range(utterance_count):
 			for j in range(i + 1, utterance_count):
 				batch.append({
 					'video_features': torch.cat((utterances[i]['video_features'], utterances[j]['video_features'])),
@@ -191,6 +194,7 @@ def compute_similarity(model, args):
 
 				if len(batch) == batch_size:
 					similarity = process_one_batch(batch, model, similarity)
+					progress_bar.update(len(batch))
 					batch = []
 
 			if similarity[i, -1] != 0:
@@ -199,6 +203,7 @@ def compute_similarity(model, args):
 
 		if len(batch) > 0:
 			similarity = process_one_batch(batch, model, similarity)
+			progress_bar.update(len(batch))
 
 		similarities[video_id] = similarity
 		starts[video_id] = np.array([utterance['start'] for utterance in utterances])

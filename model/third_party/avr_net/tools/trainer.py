@@ -39,6 +39,7 @@ class Trainer:
 
 		self.optimizer.load_state_dict(checkpoint_data['optimizer_state_dict'])
 		self.current_updates = checkpoint_data['num_updates']
+		self.current_epoch = int(checkpoint_data['num_updates'] / len(self.dataloader))
 		self.losses = checkpoint_data['losses']
 
 		if isinstance(self.losses, int):
@@ -107,8 +108,9 @@ class Trainer:
 		checkpoint_path = f'{save_dir}/training_{timestamp}.ckpt'
 
 		torch.save({
-			'num_updates': self.current_updates,
-			'model_state_dict': self.model.state_dict(),
-			'optimizer_state_dict': self.optimizer.state_dict(),
-			'losses': self.losses
+			'num_updates':					self.current_updates,
+			'epoch':								self.current_epoch,
+			'model_state_dict':			self.model.module.state_dict(),
+			'optimizer_state_dict':	self.optimizer.state_dict(),
+			'losses':								self.losses
 		}, checkpoint_path)
