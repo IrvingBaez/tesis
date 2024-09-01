@@ -56,7 +56,8 @@ def train(args):
 
 	sampler = TrainSampler(dataset)
 
-	dataloader = DataLoader(dataset, batch_size=4, num_workers=torch.cuda.device_count(), pin_memory=True, drop_last=False, collate_fn=TrainCollator(), sampler=sampler)
+	gpu_count = torch.cuda.device_count()
+	dataloader = DataLoader(dataset, batch_size=6*gpu_count, num_workers=gpu_count, pin_memory=True, drop_last=False, collate_fn=TrainCollator(), sampler=sampler)
 	trainer = Trainer(model, device, dataloader)
 
 	trainer.train(CONFIG['checkpoint'])

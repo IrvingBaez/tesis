@@ -131,9 +131,13 @@ class RelationLayer(nn.Module):
 	def divide_set(self, video, audio, visible, targets):
 		feat = torch.cat((video, audio), dim=2)
 		N, _, C, H, W = feat.shape
-		feat = feat.reshape(N, self.num_way, self.num_shot, C, H, W)
-		targets = targets.reshape(N, self.num_way, self.num_shot)
-		visible = visible.reshape(N, self.num_way, self.num_shot)
+
+		N_PER_GPU = video.shape[0]
+		TOTAL_N = N_PER_GPU * torch.distributed.get_world_size()
+
+		feat = feat.reshape(TOTAL_N, self.num_way, self.num_shot, C, H, W)
+		targets = targets.reshape(TOTAL_N, self.num_way, self.num_shot)
+		visible = visible.reshape(TOTAL_N, self.num_way, self.num_shot)
 
 		support = feat[:, :, 1:, ...].reshape(N, -1, C, H, W)
 		support_t = targets[:, :, 1:].reshape(N, -1)
