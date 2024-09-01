@@ -132,19 +132,6 @@ class RelationLayer(nn.Module):
 		feat = torch.cat((video, audio), dim=2)
 		N, _, C, H, W = feat.shape
 
-		N_PER_GPU = video.shape[0]
-		TOTAL_N = N_PER_GPU * torch.cuda.device_count()
-		print('\n\n')
-		print(f'current device: {torch.cuda.current_device()}')
-		print(f'video shape:    {video.shape}')
-		print(f'audio shape:    {audio.shape}')
-		print(f'visible shape:  {visible.shape}')
-		print(f'targets shape:  {targets.shape}')
-		print(f'Feat shape:     {feat.shape}')
-		print(f'N:              {N}')
-		print(f'TOTAL_N:        {TOTAL_N}')
-		print(f'N_PER_GPU:      {N_PER_GPU}')
-
 		feat = feat.reshape(N, self.num_way, self.num_shot, C, H, W)
 		targets = targets.reshape(N, self.num_way, self.num_shot)
 		visible = visible.reshape(N, self.num_way, self.num_shot)

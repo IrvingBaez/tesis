@@ -14,11 +14,13 @@ if __name__=='__main__':
 	data_type = 'val'
 
 	print('\n\n0- SANITY CHECK')
-	print(f'CUDA available:   {torch.cuda.is_available()}')
-	print(f'Device count:     {torch.cuda.device_count()}')
-	print(f'Current Device:   {torch.cuda.current_device()}')
-	print(f'Device name:      {torch.cuda.get_device_name(torch.cuda.current_device())}')
-	print(f'Available Memory: {torch.cuda.get_device_properties(torch.cuda.current_device()).total_memory / (1024 ** 3):.2f} GB')
+	print(f'CUDA available:         {torch.cuda.is_available()}')
+	print(f'Device count:           {torch.cuda.device_count()}')
+
+	for i in range(torch.cuda.device_count()):
+		print(f'\nInfo Device {i}:')
+		print(f'    Device name:      {torch.cuda.get_device_name(i)}')
+		print(f'    Available Memory: {torch.cuda.get_device_properties(i).total_memory / (1024 ** 3):.2f} GB')
 
 
 	print('\n\n1- DENOISE WAVES')
