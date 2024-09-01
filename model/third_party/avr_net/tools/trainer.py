@@ -72,7 +72,9 @@ class Trainer:
 				print(f"scores shape:   {batch['scores'].shape},\t\t\tdevice: {batch['scores'].device}")
 				print(f"loss:           {batch['loss']}")
 
+				torch.cuda.synchronize()
 				self.scaler.scale(batch['loss']).backward()
+				torch.cuda.synchronize()
 				self._detatch_batch(batch)
 
 				self.scaler.step(self.optimizer)
