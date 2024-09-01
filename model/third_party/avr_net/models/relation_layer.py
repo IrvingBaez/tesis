@@ -136,7 +136,7 @@ class RelationLayer(nn.Module):
 		TOTAL_N = N_PER_GPU * torch.cuda.device_count()
 
 		feat = feat.reshape(N_PER_GPU, self.num_way, self.num_shot, C, H, W)
-		targets = targets.reshape(TOTAL_N, self.num_way, self.num_shot)
+		targets = targets.reshape(N_PER_GPU, self.num_way, self.num_shot)
 		visible = visible.reshape(TOTAL_N, self.num_way, self.num_shot)
 
 		support = feat[:, :, 1:, ...].reshape(N, -1, C, H, W)
