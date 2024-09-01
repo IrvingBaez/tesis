@@ -65,6 +65,12 @@ class Trainer:
 				batch['loss'] = self.loss_function(batch['scores'], batch['targets'])
 				self.losses.append(batch['loss'])
 
+				print(f"frames shape:  {batch['frames'].shape},\tdevice: {batch['frames'].device}")
+				print(f"audio shape:   {batch['audio'].shape},\t\tdevice: {batch['audio'].device}")
+				print(f"targets shape: {batch['targets'].shape},\t\t\tdevice: {batch['targets'].device}")
+				print(f"scores shape:  {batch['scores'].shape},\t\t\tdevice: {batch['scores'].device}")
+				print(f"loss:          {batch['loss']}")
+
 				self.scaler.scale(batch['loss']).backward()
 				self._detatch_batch(batch)
 
