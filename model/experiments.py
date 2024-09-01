@@ -1,4 +1,5 @@
 import torch
+import psutil
 
 from model.avd.align_faces import main as align_faces
 from model.avd.extract_faces import main as extract_faces
@@ -14,13 +15,21 @@ if __name__=='__main__':
 	data_type = 'val'
 
 	print('\n\n0- SANITY CHECK')
-	print(f'CUDA available:         {torch.cuda.is_available()}')
+	GB_FACTOR = 1024**3
+
+	memory = psutil.virtual_memory()
+	print(f"Total Memory:           {memory.total / GB_FACTOR:.2f} GB")
+	print(f"Used Memory:            {memory.used / GB_FACTOR:.2f} GB")
+	print(f"Available Memory:       {memory.available / GB_FACTOR:.2f} GB")
+	print(f"Free Memory:            {memory.free / GB_FACTOR:.2f} GB")
+
+	print(f'\nCUDA available:         {torch.cuda.is_available()}')
 	print(f'Device count:           {torch.cuda.device_count()}')
 
 	for i in range(torch.cuda.device_count()):
 		print(f'\nInfo Device {i}:')
 		print(f'    Device name:      {torch.cuda.get_device_name(i)}')
-		print(f'    Available Memory: {torch.cuda.get_device_properties(i).total_memory / (1024 ** 3):.2f} GB')
+		print(f'    Available Memory: {torch.cuda.get_device_properties(i).total_memory / GB_FACTOR:.2f} GB')
 
 
 	print('\n\n1- DENOISE WAVES')
