@@ -69,7 +69,8 @@ class CustomDataset(Dataset):
 
 		sample['frames'] = frames
 		sample['audio'] = audio
-		sample['meta'] = { 'visible': len(frames) > 0 }
+		sample['visible'] = torch.tensor([len(frames) > 0])
+		sample['meta'] = {}
 
 		return sample
 

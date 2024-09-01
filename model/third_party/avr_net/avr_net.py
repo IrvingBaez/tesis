@@ -57,10 +57,7 @@ class AVRNET(pl.LightningModule):
 		feat_audio = self.audio_encoder(batch)
 		feat_video = self.video_encoder(batch)
 
-		targets = batch['targets']
-		visible = torch.tensor(batch['meta']['visible'], dtype=torch.int64, device=targets.device)
-
-		scores, targets = self.relation_layer(feat_video, feat_audio, visible, targets)
+		scores, targets = self.relation_layer(feat_video, feat_audio, batch['visible'], batch['targets'])
 
 		return {'scores': scores, 'targets': targets}
 
@@ -78,7 +75,7 @@ class AVRNET(pl.LightningModule):
 			output['start']				= batch['meta']['start']
 			output['end']					= batch['meta']['end']
 			output['trackid']			= batch['meta']['trackid']
-			output['visible']			= batch['meta']['visible']
+			output['visible']			= batch['visible']
 			output['losses']			= {}
 		elif exec == 'relation':
 			output['scores']			= self.relation_layer.predict(batch['video'], batch['audio'], batch['task_full'])

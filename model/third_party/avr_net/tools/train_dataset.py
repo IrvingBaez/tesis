@@ -69,7 +69,8 @@ class TrainDataset(Dataset):
 
 		sample['frames'] = frames
 		sample['audio'] = audio
-		sample['meta'] = { 'visible': len(frames) > 0 }
+		sample['visible'] = torch.tensor([len(frames) > 0])
+		sample['meta'] = {}
 
 		return sample
 
@@ -111,7 +112,7 @@ class TrainDataset(Dataset):
 
 	def _get_target(self, index):
 		uid = self.items[index][-1]
-		target =  torch.LongTensor([self.entity_to_index[uid]])
+		target = torch.LongTensor([self.entity_to_index[uid]])
 
 		return target
 
