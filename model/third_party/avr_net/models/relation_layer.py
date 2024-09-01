@@ -135,7 +135,7 @@ class RelationLayer(nn.Module):
 		N_PER_GPU = video.shape[0]
 		TOTAL_N = N_PER_GPU * torch.cuda.device_count()
 
-		feat = feat.reshape(TOTAL_N, self.num_way, self.num_shot, C, H, W)
+		feat = feat.reshape(N_PER_GPU, self.num_way, self.num_shot, C, H, W)
 		targets = targets.reshape(TOTAL_N, self.num_way, self.num_shot)
 		visible = visible.reshape(TOTAL_N, self.num_way, self.num_shot)
 
