@@ -107,19 +107,22 @@ def create_dataloader(rank, world_size, dataset, batch_size):
 
 
 def load_model(rank):
-	# INSTANTIATE MODEL
-	model = AVRNET(CONFIG)
-	model.build()
-
-	# LOAD MODEL TO GPU
+	# Set the device
 	if torch.cuda.is_available():
 		device = torch.device(f'cuda:{rank}')
-		# torch.cuda.set_device(0)
+		torch.cuda.set_device(rank)
 	else:
 		device = torch.device("cpu")
 
+	# INSTANTIATE MODEL
+	model = AVRNET(CONFIG)
+	model.build(device)
+
+	# Load model
 	model.to(device)
 	model= DDP(model, device_ids=[rank])
+
+	torch.cuda.synchronize()
 
 	return model, device
 
