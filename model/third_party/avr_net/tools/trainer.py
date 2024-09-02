@@ -71,6 +71,7 @@ class Trainer:
 				batch['loss'] = self.loss_function(batch['scores'], batch['targets'])
 				self.losses.append(batch['loss'])
 
+				torch.cuda.synchronize()
 				print(f"Current device: {torch.cuda.current_device()}")
 				print(f"frames shape:   {batch['frames'].shape},\tdevice: {batch['frames'].device}")
 				print(f"audio shape:    {batch['audio'].shape},\t\tdevice: {batch['audio'].device}")
@@ -78,7 +79,6 @@ class Trainer:
 				print(f"scores shape:   {batch['scores'].shape},\t\tdevice: {batch['scores'].device}")
 				print(f"loss:           {batch['loss']}")
 
-				torch.cuda.synchronize()
 				self.scaler.scale(batch['loss']).backward()
 				torch.cuda.synchronize()
 				self._detatch_batch(batch)
