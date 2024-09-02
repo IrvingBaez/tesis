@@ -122,7 +122,7 @@ class Trainer:
 		os.makedirs(save_dir, exist_ok=True)
 
 		timestamp = datetime.now().strftime('%Y_%m_%d_%H:%M:%S')
-		checkpoint_path = f'{save_dir}/training_{timestamp}.ckpt'
+		checkpoint_path = f'{save_dir}/training_{timestamp}_epoch_{self.current_epoch:05d}.ckpt'
 
 		torch.save({
 			'num_updates':					self.current_updates,
