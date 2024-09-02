@@ -10,7 +10,12 @@ from .tools.trainer import Trainer
 from .avr_net import AVRNET
 from model.util import argparse_helper
 from shutil import rmtree
+
 from torch.utils.data.dataloader import DataLoader
+from torch.nn.parallel import DistributedDataParallel as DDP
+import torch.distributed as dist
+from torch.utils.data import DataLoader, DistributedSampler
+import torch.multiprocessing as mp
 
 
 CONFIG = {
@@ -41,53 +46,80 @@ CONFIG = {
 }
 
 
-def train(args):
+def train(rank, world_size, args):
+	setup(rank, world_size)
+
 	if os.path.exists(args.sys_path):
 		rmtree(args.sys_path)
 
 	os.makedirs(args.sys_path)
 	os.makedirs(f'{args.sys_path}/features')
 
-	model, device = load_model()
+	model, device = load_model(rank)
 	model.train()
 
 	dataset = TrainDataset(args)
 	dataset.load_dataset()
 
-	sampler = TrainSampler(dataset)
+	# sampler = TrainSampler(dataset)
 
-	gpu_count = torch.cuda.device_count()
-	dataloader = DataLoader(
-		dataset,
-		batch_size=1*gpu_count,
-		num_workers=gpu_count,
-		sampler=sampler,
-		collate_fn=TrainCollator(),
-		pin_memory=True,
-		drop_last=False,
-		persistent_workers=True
-	)
+	# gpu_count = torch.cuda.device_count()
+	# dataloader = DataLoader(
+	# 	dataset,
+	# 	batch_size=1*gpu_count,
+	# 	num_workers=gpu_count,
+	# 	sampler=sampler,
+	# 	collate_fn=TrainCollator(),
+	# 	pin_memory=True,
+	# 	drop_last=False,
+	# 	persistent_workers=True
+	# )
 
-	trainer = Trainer(model, device, dataloader)
+	dataloader = create_dataloader(rank, world_size, dataset, batch_size=4)
+
+	trainer = Trainer(model, device, dataloader, rank)
 	trainer.train(CONFIG['checkpoint'])
 
 	rmtree(f'{args.sys_path}/features')
+	cleanup()
 
 
-def load_model():
+def setup(rank, world_size):
+	os.environ['MASTER_ADDR'] = '127.0.0.1'
+	os.environ['MASTER_PORT'] = '29500'
+
+	dist.init_process_group("nccl", rank=rank, world_size=world_size)
+	torch.cuda.set_device(rank)
+
+
+def cleanup():
+	dist.destroy_process_group()
+
+
+def create_dataloader(rank, world_size, dataset, batch_size):
+	# FIXME: ES EL SAMPLER, DEBERÏA USAR TainSampler >:v!!!
+	# sampler = TrainSampler(dataset)
+	# sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank)
+	sampler = TrainSampler(dataset, num_replicas=world_size, rank=rank)
+	dataloader = DataLoader(dataset, batch_size=batch_size, sampler=sampler, num_workers=4, pin_memory=True, collate_fn=TrainCollator())
+
+	return dataloader
+
+
+def load_model(rank):
 	# INSTANTIATE MODEL
 	model = AVRNET(CONFIG)
 	model.build()
 
 	# LOAD MODEL TO GPU
 	if torch.cuda.is_available():
-		device = torch.device("cuda")
+		device = torch.device(f'cuda:{rank}')
 		# torch.cuda.set_device(0)
 	else:
 		device = torch.device("cpu")
 
-	model= nn.DataParallel(model)
 	model.to(device)
+	model= DDP(model, device_ids=[rank])
 
 	return model, device
 
@@ -118,9 +150,15 @@ def initialize_arguments(**kwargs):
 
 def main(**kwargs):
 	args = initialize_arguments(**kwargs, not_empty=True)
-	train(args)
+	world_size = torch.cuda.device_count()
+
+	mp.spawn(train, args=(world_size, args), nprocs=world_size, join=True)
+	#	train(args)
 
 
 if __name__ == '__main__':
 	args = initialize_arguments()
-	train(args)
+	world_size = torch.cuda.device_count()
+
+	mp.spawn(train, args=(world_size, args), nprocs=world_size, join=True)
+	# train(args)

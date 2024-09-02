@@ -10,13 +10,14 @@ from .losses import MSELoss
 
 
 class Trainer:
-	def __init__(self, model, device, dataloader) -> None:
+	def __init__(self, model, device, dataloader, rank) -> None:
 		self.train_timer = Timer()
 		self.validation_timer = Timer()
 
 		self.model = model
 		self.device = device
 		self.dataloader = dataloader
+		self.rank = rank
 		self.max_updates = 60_000
 		self.max_epochs = self.max_updates / len(dataloader)
 
@@ -68,8 +69,8 @@ class Trainer:
 				print(f"Current device: {torch.cuda.current_device()}")
 				print(f"frames shape:   {batch['frames'].shape},\tdevice: {batch['frames'].device}")
 				print(f"audio shape:    {batch['audio'].shape},\t\tdevice: {batch['audio'].device}")
-				print(f"targets shape:  {batch['targets'].shape},\t\t\tdevice: {batch['targets'].device}")
-				print(f"scores shape:   {batch['scores'].shape},\t\t\tdevice: {batch['scores'].device}")
+				print(f"targets shape:  {batch['targets'].shape},\t\tdevice: {batch['targets'].device}")
+				print(f"scores shape:   {batch['scores'].shape},\t\tdevice: {batch['scores'].device}")
 				print(f"loss:           {batch['loss']}")
 
 				torch.cuda.synchronize()
@@ -110,6 +111,8 @@ class Trainer:
 
 
 	def _save_checkpoint(self):
+		if self.rank != 0: return
+
 		save_dir = 'model/third_party/avr_net/checkpoints'
 		os.makedirs(save_dir, exist_ok=True)
 
