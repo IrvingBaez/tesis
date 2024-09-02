@@ -36,9 +36,14 @@ class Trainer:
 
 
 	def train(self, checkpoint_path) -> None:
-		checkpoint_data = torch.load(checkpoint_path)
+		checkpoint_data = torch.load(checkpoint_path, map_location='cpu')
 
+		print(f'Process {torch.cuda.current_device()} loading weights at {checkpoint_path}')
+
+		model_weights = self._wrap_weights(checkpoint_data)
+		self.model.load_state_dict(model_weights)
 		self.optimizer.load_state_dict(checkpoint_data['optimizer_state_dict'])
+
 		self.current_updates = checkpoint_data['num_updates']
 		self.current_epoch = int(checkpoint_data['num_updates'] / len(self.dataloader))
 		self.losses = checkpoint_data['losses']
@@ -126,3 +131,15 @@ class Trainer:
 			'optimizer_state_dict':	self.optimizer.state_dict(),
 			'losses':								self.losses
 		}, checkpoint_path)
+
+
+	def _wrap_weights(self, checkpoint_data):
+		state_dict = checkpoint_data['model_state_dict']
+
+		# Adjust state_dict keys
+		new_state_dict = {}
+		for key, value in state_dict.items():
+				new_key = f"module.{key}" if not key.startswith("module.") else key
+				new_state_dict[new_key] = value
+
+		return new_state_dict
