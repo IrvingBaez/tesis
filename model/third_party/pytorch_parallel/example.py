@@ -14,8 +14,6 @@ import torchvision.models as models
 
 from model.util import argparse_helper
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '0,1'
-
 # Configuración de parámetros
 batch_size = 64  # Prueba con un tamaño de batch más pequeño
 learning_rate = 0.001
