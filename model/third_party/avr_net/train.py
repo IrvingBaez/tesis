@@ -46,6 +46,18 @@ CONFIG = {
 }
 
 
+def setup(rank, world_size):
+	os.environ['MASTER_ADDR'] = '127.0.0.1'
+	os.environ['MASTER_PORT'] = '29500'
+
+	dist.init_process_group("nccl", rank=rank, world_size=world_size)
+	torch.cuda.set_device(rank)
+
+
+def cleanup():
+	dist.destroy_process_group()
+
+
 def train(rank, world_size, args):
 	setup(rank, world_size)
 
@@ -61,21 +73,7 @@ def train(rank, world_size, args):
 	dataset = TrainDataset(args)
 	dataset.load_dataset()
 
-	# sampler = TrainSampler(dataset)
-
-	# gpu_count = torch.cuda.device_count()
-	# dataloader = DataLoader(
-	# 	dataset,
-	# 	batch_size=1*gpu_count,
-	# 	num_workers=gpu_count,
-	# 	sampler=sampler,
-	# 	collate_fn=TrainCollator(),
-	# 	pin_memory=True,
-	# 	drop_last=False,
-	# 	persistent_workers=True
-	# )
-
-	dataloader = create_dataloader(rank, world_size, dataset, batch_size=4)
+	dataloader = create_dataloader(rank, world_size, dataset, batch_size=2)
 
 	trainer = Trainer(model, device, dataloader, rank)
 	trainer.train(CONFIG['checkpoint'])
@@ -84,22 +82,7 @@ def train(rank, world_size, args):
 	cleanup()
 
 
-def setup(rank, world_size):
-	os.environ['MASTER_ADDR'] = '127.0.0.1'
-	os.environ['MASTER_PORT'] = '29500'
-
-	dist.init_process_group("nccl", rank=rank, world_size=world_size)
-	torch.cuda.set_device(rank)
-
-
-def cleanup():
-	dist.destroy_process_group()
-
-
 def create_dataloader(rank, world_size, dataset, batch_size):
-	# FIXME: ES EL SAMPLER, DEBERÏA USAR TainSampler >:v!!!
-	# sampler = TrainSampler(dataset)
-	# sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank)
 	sampler = TrainSampler(dataset, num_replicas=world_size, rank=rank)
 	dataloader = DataLoader(dataset, batch_size=batch_size, sampler=sampler, num_workers=4, pin_memory=True, collate_fn=TrainCollator())
 
@@ -107,23 +90,13 @@ def create_dataloader(rank, world_size, dataset, batch_size):
 
 
 def load_model(rank):
-	# Set the device
-	if torch.cuda.is_available():
-		device = torch.device(f'cuda:{rank}')
-		torch.cuda.set_device(rank)
-	else:
-		device = torch.device("cpu")
-
-	# INSTANTIATE MODEL
+	device = torch.device(f'cuda:{rank}' if torch.cuda.is_available() else "cpu")
 	model = AVRNET(CONFIG)
 	model.build(device)
-
-	# Load model
 	model.to(device)
-	model= DDP(model, device_ids=[rank])
-
+	model = DDP(model, device_ids=[rank])
 	torch.cuda.synchronize()
-
+	
 	return model, device
 
 

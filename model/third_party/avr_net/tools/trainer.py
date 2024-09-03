@@ -5,15 +5,11 @@ from datetime import datetime
 from tqdm.auto import tqdm
 
 from .scheduler import MultiStepScheduler
-from .timer import Timer
 from .losses import MSELoss
 
 
 class Trainer:
 	def __init__(self, model, device, dataloader, rank) -> None:
-		self.train_timer = Timer()
-		self.validation_timer = Timer()
-
 		self.model = model
 		self.device = device
 		self.dataloader = dataloader
@@ -25,7 +21,7 @@ class Trainer:
 		self.current_epoch = 0
 
 		self.loss_function = MSELoss()
-		self.scaler = torch.cuda.amp.GradScaler(enabled=False)
+		self.scaler = torch.cuda.amp.GradScaler(enabled=True) # Was False
 		self.losses = []
 
 		optimizer_params = self._get_optimizer_params()
@@ -37,8 +33,7 @@ class Trainer:
 
 	def train(self, checkpoint_path) -> None:
 		checkpoint_data = torch.load(checkpoint_path, map_location='cpu')
-
-		print(f'Process {torch.cuda.current_device()} loading weights at {checkpoint_path}')
+		print(f'Process {self.rank} loading weights at {checkpoint_path}')
 
 		model_weights = self._wrap_weights(checkpoint_data)
 		self.model.load_state_dict(model_weights)
@@ -46,10 +41,7 @@ class Trainer:
 
 		self.current_updates = checkpoint_data['num_updates']
 		self.current_epoch = int(checkpoint_data['num_updates'] / len(self.dataloader))
-		self.losses = checkpoint_data['losses']
-
-		if isinstance(self.losses, int):
-			self.losses = [self.losses]
+		self.losses = checkpoint_data['losses'] if isinstance(self.losses, list) else [self.losses]
 
 		print(f'Model has {self.current_updates} updates, {max(0, self.max_updates - self.current_updates)} more updates to go...')
 
@@ -65,24 +57,17 @@ class Trainer:
 
 			for batch in self.dataloader:
 				batch = self._mount_batch(batch)
-				model_output = self.model(batch, exec='train')
 
-				batch.update(model_output)
-				batch['loss'] = self.loss_function(batch['scores'], batch['targets'])
-				self.losses.append(batch['loss'])
+				with torch.cuda.amp.autocast():
+					model_output = self.model(batch, exec='train')
+					batch.update(model_output)
+					batch['loss'] = self.loss_function(batch['scores'], batch['targets'])
 
 				torch.cuda.synchronize()
-				print(f"Current device: {torch.cuda.current_device()}")
-				print(f"frames shape:   {batch['frames'].shape},\tdevice: {batch['frames'].device}")
-				print(f"audio shape:    {batch['audio'].shape},\t\tdevice: {batch['audio'].device}")
-				print(f"targets shape:  {batch['targets'].shape},\t\tdevice: {batch['targets'].device}")
-				print(f"scores shape:   {batch['scores'].shape},\t\tdevice: {batch['scores'].device}")
-				print(f"loss:           {batch['loss']}")
-
 				self.scaler.scale(batch['loss']).backward()
 				torch.cuda.synchronize()
-				self._detatch_batch(batch)
 
+				self._detatch_batch(batch)
 				self.scaler.step(self.optimizer)
 				self.scaler.update()
 				self.current_updates += 1
@@ -109,10 +94,7 @@ class Trainer:
 
 
 	def _get_optimizer_params(self):
-		parameters = list(self.model.parameters())
-		parameters = [{"params": parameters}]
-
-		return parameters
+		return [{"params": list(self.model.parameters())}]
 
 
 	def _save_checkpoint(self):
@@ -135,11 +117,10 @@ class Trainer:
 
 	def _wrap_weights(self, checkpoint_data):
 		state_dict = checkpoint_data['model_state_dict']
-
-		# Adjust state_dict keys
 		new_state_dict = {}
+
 		for key, value in state_dict.items():
-				new_key = f"module.{key}" if not key.startswith("module.") else key
-				new_state_dict[new_key] = value
+			new_key = f"module.{key}" if not key.startswith("module.") else key
+			new_state_dict[new_key] = value
 
 		return new_state_dict
