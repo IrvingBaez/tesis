@@ -1,5 +1,6 @@
 import argparse
 import os
+import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -12,6 +13,8 @@ import torchvision.datasets as datasets
 import torchvision.models as models
 
 from model.util import argparse_helper
+
+os.environ["CUDA_VISIBLE_DEVICES"] = '0,1'
 
 # Configuración de parámetros
 batch_size = 64  # Prueba con un tamaño de batch más pequeño
@@ -30,13 +33,14 @@ def setup(rank, world_size):
 	os.environ['MASTER_PORT'] = '12355'
 
 	dist.init_process_group(
-		backend='gloo',  # Cambia 'nccl' por 'gloo' si persisten problemas
+		backend='nccl',
 		init_method='env://',
 		world_size=world_size,
 		rank=rank
 	)
 	torch.cuda.set_device(rank)
 	torch.cuda.empty_cache()
+	time.sleep(rank * 5)
 
 
 def cleanup():
