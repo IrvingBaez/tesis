@@ -9,6 +9,7 @@ from model.avd.train_avd_predictor import main as train_avd
 from model.asd.visualize_asd import main as visualize_asd
 from model.denoise.denoise import main as denoise
 from model.util import get_path
+from model.third_party.pytorch_parallel.example import main as parallel_example
 
 # TODO: Implement this process for unnanotated videos.
 if __name__=='__main__':
@@ -57,8 +58,8 @@ if __name__=='__main__':
 	print('\n\n6- TRAINING AUDIO VISUAL DIARIZATION')
 	params = {'denoiser': 'dihard18', 'vad_detector': 'ground_truth', 'asd_detector': 'ground_truth', 'avd_detector': 'avr_net', 'aligned': True}
 
-	train_avd(**params)
-
+	# train_avd(**params)
+	parallel_example()
 
 	print('\n\n7- AUDIO VISUAL DIARIZATION')
 	avd_tests = []
@@ -75,10 +76,10 @@ if __name__=='__main__':
 						'avd_detector': 'avr_net'
 					})
 
-	for params in avd_tests:
-		print(params)
-		perform_avd(**params)
-		print('')
+	# for params in avd_tests:
+	# 	print(params)
+	# 	perform_avd(**params)
+	# 	print('')
 
 
 	# print('\n\n8- VISUALIZATION')
