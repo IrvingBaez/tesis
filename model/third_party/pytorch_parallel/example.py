@@ -19,6 +19,7 @@ learning_rate = 0.001
 world_size = torch.cuda.device_count()
 data_path = 'model/third_party/pytorch_parallel/data'
 checkpoint_dir = 'model/third_party/pytorch_parallel/checkpoints'
+torch.backends.cudnn.benchmark = False
 
 
 def setup(rank, world_size):
@@ -117,6 +118,10 @@ def train(rank, world_size, args):
 
 			optimizer.zero_grad()
 			outputs = model(inputs)
+
+			# Sincronizar GPUs antes de cualquier operación crítica
+			torch.cuda.synchronize(rank)
+
 			loss = criterion(outputs, targets)
 			loss.backward()
 			optimizer.step()
