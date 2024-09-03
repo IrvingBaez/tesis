@@ -14,13 +14,15 @@ import torchvision.models as models
 from model.util import argparse_helper
 
 # Configuración de parámetros
-batch_size = 128
+batch_size = 64  # Prueba con un tamaño de batch más pequeño
 learning_rate = 0.001
 world_size = torch.cuda.device_count()
 data_path = 'model/third_party/pytorch_parallel/data'
 checkpoint_dir = 'model/third_party/pytorch_parallel/checkpoints'
 torch.backends.cudnn.benchmark = False
 
+# Establecer variable de entorno para evitar problemas con NCCL
+os.environ['NCCL_P2P_DISABLE'] = '1'
 
 def setup(rank, world_size):
 	# Establecer las variables de entorno necesarias
@@ -28,12 +30,13 @@ def setup(rank, world_size):
 	os.environ['MASTER_PORT'] = '12355'
 
 	dist.init_process_group(
-		backend='nccl',
+		backend='gloo',  # Cambia 'nccl' por 'gloo' si persisten problemas
 		init_method='env://',
 		world_size=world_size,
 		rank=rank
 	)
 	torch.cuda.set_device(rank)
+	torch.cuda.empty_cache()
 
 
 def cleanup():
@@ -125,6 +128,9 @@ def train(rank, world_size, args):
 			loss = criterion(outputs, targets)
 			loss.backward()
 			optimizer.step()
+
+			# Sincronizar nuevamente después de la actualización
+			torch.cuda.synchronize(rank)
 
 			if batch_idx % 10 == 0 and rank == 0:
 				print(f'Epoch [{epoch}/{total_epochs}] Batch [{batch_idx}/{len(train_loader)}] Loss: {loss.item()}')
