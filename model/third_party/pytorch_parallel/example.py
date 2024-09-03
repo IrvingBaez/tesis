@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -16,6 +17,9 @@ epochs = 5
 world_size = torch.cuda.device_count()
 
 def setup(rank, world_size):
+	os.environ['MASTER_ADDR'] = 'localhost'
+	os.environ['MASTER_PORT'] = '12355'
+
 	dist.init_process_group(
 		backend='nccl',
 		init_method='env://',
