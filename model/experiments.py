@@ -59,7 +59,7 @@ if __name__=='__main__':
 	params = {'denoiser': 'dihard18', 'vad_detector': 'ground_truth', 'asd_detector': 'ground_truth', 'avd_detector': 'avr_net', 'aligned': True}
 
 	# train_avd(**params)
-	parallel_example()
+	parallel_example(checkpoint='model/third_party/pytorch_parallel/checkpoints/checkpoint_epoch_00004.pth')
 
 	print('\n\n7- AUDIO VISUAL DIARIZATION')
 	avd_tests = []
