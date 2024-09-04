@@ -114,7 +114,7 @@ def train(rank, world_size, args):
 
 			# Synchronize GPUs after grad step
 			torch.cuda.synchronize(rank)
-			
+
 			if rank == 0:
 				batches_pb.update()
 
@@ -197,7 +197,7 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--sys_path',				type=str,	help='Path to the folder where to save all the system outputs')
 
 	# TRAINING CONFIGURATION
-	parser.add_argument('--gpu_batch_size',	type=int,	help='Training batch size per GPU', default=6)
+	parser.add_argument('--gpu_batch_size',	type=int,	help='Training batch size per GPU', default=4)
 	parser.add_argument('--learning_rate',	type=int,	help='Training learning rate', default=0.0005)
 	parser.add_argument('--weight_decay',		type=int,	help='Training weight decay', default=0.0001)
 	parser.add_argument('--checkpoint', 		type=str,	help='Path of checkpoint to continue training', default=None)
