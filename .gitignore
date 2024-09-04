@@ -9,6 +9,7 @@ dataset/face_clips/
 # Downloadable model
 *.pth
 *.ckpt
+model/third_party/pytorch_parallel/data/*
 
 # Program output
 *.csv

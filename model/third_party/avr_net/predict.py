@@ -60,16 +60,16 @@ def predict(args):
 
 
 def load_model():
-	# INSTANTIATE MODEL
-	model = AVRNET(CONFIG)
-	model.build()
-
 	# LOAD MODEL TO GPU
 	if torch.cuda.is_available():
 		device = torch.device("cuda")
 		# torch.cuda.set_device(0)
 	else:
 		device = torch.device("cpu")
+
+	# INSTANTIATE MODEL
+	model = AVRNET(CONFIG)
+	model.build(device)
 
 	model= nn.DataParallel(model)
 	model.to(device)
@@ -293,7 +293,7 @@ def load_features(video_id, args):
 			dic['start'].pop(index)
 			dic['end'].pop(index)
 			dic['trackid'].pop(index)
-			dic['visible'].pop(index)
+			dic['visible'] = torch.cat((dic['visible'][:index], dic['visible'][index+1:]))
 
 	return merge_features(dicts)
 

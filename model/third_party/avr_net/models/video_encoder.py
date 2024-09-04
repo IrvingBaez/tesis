@@ -136,9 +136,6 @@ class IBasicBlock(nn.Module):
 		out = self.conv2(out)
 		out = self.bn3(out)
 
-		print(f"x shape: {x.shape}")
-		print(f"identity shape: {identity.shape}")
-
 		if self.downsample is not None:
 			identity = self.downsample(x)
 

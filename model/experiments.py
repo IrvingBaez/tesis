@@ -58,8 +58,8 @@ if __name__=='__main__':
 	print('\n\n6- TRAINING AUDIO VISUAL DIARIZATION')
 	params = {'denoiser': 'dihard18', 'vad_detector': 'ground_truth', 'asd_detector': 'ground_truth', 'avd_detector': 'avr_net', 'aligned': True}
 
-	# train_avd(**params)
-	parallel_example(checkpoint='model/third_party/pytorch_parallel/checkpoints/checkpoint_epoch_00004.pth')
+	train_avd(**params)
+	# parallel_example(checkpoint='model/third_party/pytorch_parallel/checkpoints/checkpoint_epoch_00004.pth')
 
 	print('\n\n7- AUDIO VISUAL DIARIZATION')
 	avd_tests = []
@@ -76,10 +76,10 @@ if __name__=='__main__':
 						'avd_detector': 'avr_net'
 					})
 
-	# for params in avd_tests:
-	# 	print(params)
-	# 	perform_avd(**params)
-	# 	print('')
+	for params in avd_tests:
+		print(params)
+		perform_avd(**params)
+		print('')
 
 
 	# print('\n\n8- VISUALIZATION')

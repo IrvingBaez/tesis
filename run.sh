@@ -13,6 +13,11 @@ export TF_USE_LEGACY_KERAS=1
 export PYTHONPATH=$PWD
 export CUDA_VISIBLE_DEVICES=0
 
+# For torch.nn.parallel.DistributedDataParallel
+export MASTER_ADDR='localhost'
+export MASTER_PORT='12355'
+export NCCL_P2P_DISABLE='1'
+
 program="model/experiments.py"
 if [ "$#" -gt 0 ]; then
     program="$@"

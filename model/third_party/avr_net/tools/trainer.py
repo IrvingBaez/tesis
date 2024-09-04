@@ -21,7 +21,7 @@ class Trainer:
 		self.current_epoch = 0
 
 		self.loss_function = MSELoss()
-		self.scaler = torch.cuda.amp.GradScaler(enabled=True) # Was False
+		# self.scaler = torch.cuda.amp.GradScaler(enabled=False)
 		self.losses = []
 
 		optimizer_params = self._get_optimizer_params()
@@ -58,10 +58,10 @@ class Trainer:
 			for batch in self.dataloader:
 				batch = self._mount_batch(batch)
 
-				with torch.cuda.amp.autocast():
-					model_output = self.model(batch, exec='train')
-					batch.update(model_output)
-					batch['loss'] = self.loss_function(batch['scores'], batch['targets'])
+				# with torch.cuda.amp.autocast():
+				model_output = self.model(batch, exec='train')
+				batch.update(model_output)
+				batch['loss'] = self.loss_function(batch['scores'], batch['targets'])
 
 				torch.cuda.synchronize()
 				self.scaler.scale(batch['loss']).backward()

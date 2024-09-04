@@ -14,12 +14,11 @@ class TrainDataset(Dataset):
 	# DATASET CONFIG: {'data_dir': './dataset/', 'max_frame': 200, 'min_frame': 20, 'step_frame': 50, 'snippet_length': 1, 'missing_rate': 0, 'processors': {'face_pad_processor': {'type': 'face_pad', 'params': {'length': 1}}, 'face_to_tensor_processor': {'type': 'face_to_tensor', 'params': {}}, 'face_resize_processor': {'type': 'face_resize', 'params': {'dest_size': [112, 112]}}, 'face_normalize_processor': {'type': 'face_normalize', 'params': {'mean': 0.5, 'std': 0.5}}, 'audio_normalize_processor': {'type': 'audio_normalize', 'params': {'desired_rms': 0.1, 'eps': 0.0001}}, 'audio_to_tensor_processor': {'type': 'audio_to_tensor', 'params': {}}}, 'sampler': {}}
 	def __init__(self, args):
 		super().__init__()
-		self.batch_size = 10
-		self.snippet_length = 1
-		self._max_frames = 200
-		self._min_frames = 20
-		self._step_frame = 50
-		self._missing_rate = 0
+		self.snippet_length	= 1
+		self._max_frames		= 200
+		self._min_frames		= 20
+		self._step_frame 		= 50
+		self._missing_rate	= 0
 
 		self.video_ids		= args.video_ids
 		self.videos_path	= args.videos_path
@@ -34,6 +33,8 @@ class TrainDataset(Dataset):
 		self.processors.append(FaceNormalize({'mean': 0.5, 'std': 0.5}))
 		self.processors.append(AudioNormalize({'desired_rms': 0.1, 'eps': 0.0001}))
 		self.processors.append(AudioTransform())
+
+		self._load_dataset()
 
 
 	def __len__(self):
@@ -134,7 +135,7 @@ class TrainDataset(Dataset):
 
 
 	# TODO: this function does too much stuff.
-	def load_dataset(self):
+	def _load_dataset(self):
 		waves_path 	= self.waves_path
 		rttms_path 	= self.rttms_path
 

@@ -8,6 +8,7 @@ from model.third_party.avr_net.train import main as train_avr_net
 from model.third_party.avr_net.predict import main as predict
 
 
+# TODO: Training is always done with the same, data. Is this file, really necesary?
 def train_avd_predictor(args):
 	if args.avd_detector == 'avr_net':
 		arguments = {
