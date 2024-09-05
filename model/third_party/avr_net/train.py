@@ -52,6 +52,7 @@ CONFIG = {
 
 def setup(rank, world_size):
 	torch.backends.cudnn.benchmark = False
+	torch.autograd.set_detect_anomaly(True)
 
 	dist.init_process_group(
 		backend='nccl',
@@ -98,6 +99,15 @@ def train(rank, world_size, args):
 
 		batches_pb = tqdm(total=len(dataloader), desc='Batches', leave=False)
 		for batch in dataloader:
+			if rank == 0:  # Only rank 0 to avoid clutter, or print for all ranks if needed
+				print(f"[Rank {rank}] Epoch {epoch} - Batch size: {batch['scores'].shape}")
+
+				# Print the shapes of the data being sent to each GPU
+				for key, value in batch.items():
+						print(f"[Rank {rank}] Tensor {key} shape: {value.shape}")
+
+			torch.cuda.synchronize(rank)
+
 			# batch = self._mount_batch(batch, device)
 			model_output = model(batch, exec='train')
 
@@ -190,7 +200,7 @@ def load_checkpoint(rank, checkpoint_path, model, optimizer, schedueler):
 
 	if 'losses' in checkpoint:
 		losses = checkpoint['losses']
-		
+
 	if not isinstance(losses, list): losses = [losses]
 
 	if rank == 0:
