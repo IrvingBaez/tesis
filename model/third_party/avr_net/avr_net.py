@@ -16,7 +16,6 @@ class AVRNET(nn.Module):
 		self.video_encoder	= VideoEncoder(self.config['video'])
 		self.relation_layer	= RelationLayer(self.config['relation'])
 
-
 	def train(self, mode=True):
 		super().train(mode)
 		if self.config['audio']['fix_layers']:
