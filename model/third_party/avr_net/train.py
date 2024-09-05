@@ -214,7 +214,7 @@ def initialize_arguments(**kwargs):
 	args.video_ids = args.video_ids.split(',')
 
 	if args.checkpoint is not None:
-		CONFIG['checkpoint'] = args.checkpoint
+		args.checkpoint = CONFIG['checkpoint']
 
 	if torch.cuda.is_available():
 		args.world_size = torch.cuda.device_count()
