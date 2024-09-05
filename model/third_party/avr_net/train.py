@@ -100,7 +100,7 @@ def train(rank, world_size, args):
 		batches_pb = tqdm(total=len(dataloader), desc='Batches', leave=False)
 		for batch in dataloader:
 			if rank == 0:  # Only rank 0 to avoid clutter, or print for all ranks if needed
-				print(f"[Rank {rank}] Epoch {epoch} - Batch size: {batch['scores'].shape}")
+				print(f"[Rank {rank}] Epoch {epoch} - \n\tAudio size: {batch['audio'].shape}, \n\tFrames size: {batch['frames'].shape}\n\tTargets size {batch['targets'].shape}")
 
 				# Print the shapes of the data being sent to each GPU
 				for key, value in batch.items():
@@ -233,7 +233,7 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--sys_path',				type=str,	help='Path to the folder where to save all the system outputs')
 
 	# TRAINING CONFIGURATION
-	parser.add_argument('--gpu_batch_size',	type=int,	help='Training batch size per GPU', default=4)
+	parser.add_argument('--gpu_batch_size',	type=int,	help='Training batch size per GPU', default=2)
 	parser.add_argument('--learning_rate',	type=int,	help='Training learning rate', default=0.0005)
 	parser.add_argument('--weight_decay',		type=int,	help='Training weight decay', default=0.0001)
 	parser.add_argument('--checkpoint', 		type=str,	help='Path of checkpoint to continue training', default=None)
