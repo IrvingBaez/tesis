@@ -102,10 +102,6 @@ def train(rank, world_size, args):
 			if rank == 0:  # Only rank 0 to avoid clutter, or print for all ranks if needed
 				print(f"[Rank {rank}] Epoch {epoch} - \n\tAudio size: {batch['audio'].shape}, \n\tFrames size: {batch['frames'].shape}\n\tTargets size {batch['targets'].shape}")
 
-				# Print the shapes of the data being sent to each GPU
-				for key, value in batch.items():
-						print(f"[Rank {rank}] Tensor {key} shape: {value.shape}")
-
 			torch.cuda.synchronize(rank)
 
 			# batch = self._mount_batch(batch, device)
