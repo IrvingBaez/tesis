@@ -163,12 +163,6 @@ def save_checkpoint(rank, epoch, model, optimizer, scheduler, losses):
 
 
 def load_checkpoint(rank, checkpoint_path, model, optimizer, schedueler):
-	if rank != 0:
-		dist.barrier()
-		return 0, []
-
-	if not checkpoint_path: return 0, []
-
 	if os.path.isfile(checkpoint_path):
 		checkpoint = torch.load(checkpoint_path, map_location='cpu')
 
@@ -185,13 +179,13 @@ def load_checkpoint(rank, checkpoint_path, model, optimizer, schedueler):
 		losses = checkpoint['losses']
 		if not isinstance(losses, list): losses = [losses]
 
-		print(f'Loading checkpoint from {checkpoint_path}, resuming training from epoch {start_epoch}')
-
-		return start_epoch, losses
+		if rank == 0:
+			print(f'Loading checkpoint from {checkpoint_path}, resuming training from epoch {start_epoch}')
 	else:
-		print(f'Checkpoint not found at: {checkpoint_path}, using random initialization')
+		start_epoch, losses = 0, []
 
-		return 0, []
+		if rank == 0:
+			print(f'Checkpoint not found at: {checkpoint_path}, using random initialization')
 
 
 def initialize_arguments(**kwargs):
