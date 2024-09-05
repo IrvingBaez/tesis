@@ -84,11 +84,11 @@ def train(rank, world_size, args):
 	dataloader = DataLoader(dataset, sampler=sampler, batch_size=args.gpu_batch_size, num_workers=args.world_size, pin_memory=True, collate_fn=TrainCollator())
 
 	# Load prepare model and optimizer data
-	model, optimizer_params, device = load_model(rank)
+	model, optimizer_params = load_model(rank)
 	optimizer = Adam(optimizer_params, lr=args.learning_rate, weight_decay=args.weight_decay)
 	scheduler = MultiStepScheduler(optimizer)
 	criterion = MSELoss()
-	start_epoch, losses = load_checkpoint(args.checkpoint, model, optimizer, scheduler)
+	start_epoch, losses = load_checkpoint(rank, args.checkpoint, model, optimizer, scheduler)
 	total_epochs = start_epoch + args.epochs
 	model.train()
 
@@ -120,7 +120,7 @@ def train(rank, world_size, args):
 
 		if rank == 0:
 			epochs_pb.update()
-			save_checkpoint(epoch, model, optimizer, scheduler, losses)
+			save_checkpoint(rank, epoch, model, optimizer, scheduler, losses)
 
 	rmtree(f'{args.sys_path}/features')
 	cleanup()
@@ -129,17 +129,24 @@ def train(rank, world_size, args):
 def load_model(rank):
 	device = torch.device(f'cuda:{rank}' if torch.cuda.is_available() else "cpu")
 	model = AVRNET(CONFIG)
-	model.build(device)
+	model.build()
+
+	# Convert BatchNorm layers to SyncBatchNorm if using multiple GPUs
+	if torch.cuda.device_count() > 1:
+		model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+
 	model.to(device)
 	model = DDP(model, device_ids=[rank])
 	torch.cuda.synchronize()
 
 	optimizer_params = [{"params": list(model.parameters())}]
 
-	return model, optimizer_params, device
+	return model, optimizer_params
 
 
-def save_checkpoint(epoch, model, optimizer, scheduler, losses):
+def save_checkpoint(rank, epoch, model, optimizer, scheduler, losses):
+	if rank != 0: return
+
 	save_dir = 'model/third_party/avr_net/checkpoints'
 	os.makedirs(save_dir, exist_ok=True)
 
@@ -155,7 +162,11 @@ def save_checkpoint(epoch, model, optimizer, scheduler, losses):
 	}, checkpoint_path)
 
 
-def load_checkpoint(checkpoint_path, model, optimizer, schedueler):
+def load_checkpoint(rank, checkpoint_path, model, optimizer, schedueler):
+	if rank != 0:
+		dist.barrier()
+		return 0, []
+
 	if not checkpoint_path: return 0, []
 
 	if os.path.isfile(checkpoint_path):

@@ -1,38 +1,20 @@
-import torch, os, gdown
 import torch.nn as nn
-import pytorch_lightning as pl
 
 from model.third_party.avr_net.models.relation_layer import RelationLayer
 from model.third_party.avr_net.models.audio_encoder import AudioEncoder
 from model.third_party.avr_net.models.video_encoder import VideoEncoder
 
 
-class AVRNET(pl.LightningModule):
+class AVRNET(nn.Module):
 	def __init__(self, config):
 		super().__init__()
 		self.config = config
 
 
-	def build(self, device):
+	def build(self):
 		self.audio_encoder	= AudioEncoder(self.config['audio'])
 		self.video_encoder	= VideoEncoder(self.config['video'])
 		self.relation_layer	= RelationLayer(self.config['relation'])
-
-		if not os.path.isfile(self.config['checkpoint']):
-			os.makedirs(self.config['checkpoint'].rsplit('/', 1)[0], exist_ok=True)
-			gdown.download(id='1qX-Azl6KkuJv9DdQgIQ9GlpP3111RK2b', output=self.config['checkpoint'], quiet=True)
-
-		try:
-			model_checkpoint = torch.load(self.config['checkpoint'], map_location=device)
-			print(f'Using checkpoint at: {self.config['checkpoint']}')
-		except RuntimeError as e:
-			print(f"Failed to load checkpoint on device {device}: {e}")
-			raise e
-
-		self.load_state_dict(model_checkpoint['model_state_dict'], strict=True)
-
-		if device.type == 'cuda':
-			torch.cuda.synchronize(device)
 
 
 	def train(self, mode=True):
