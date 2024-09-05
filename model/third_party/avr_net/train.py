@@ -163,29 +163,50 @@ def save_checkpoint(rank, epoch, model, optimizer, scheduler, losses):
 
 
 def load_checkpoint(rank, checkpoint_path, model, optimizer, schedueler):
-	if os.path.isfile(checkpoint_path):
-		checkpoint = torch.load(checkpoint_path, map_location='cpu')
-
-		# Ensuring full precision
-		model_weights = checkpoint['model_state_dict']
-		for key, value in model_weights.items():
-			model_weights[key] = value.float()
-
-		model.load_state_dict(model_weights)
-		optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-		schedueler.load_state_dict(checkpoint['schedueler_state_dict'])
-
-		start_epoch = checkpoint['epoch'] + 1
-		losses = checkpoint['losses']
-		if not isinstance(losses, list): losses = [losses]
-
-		if rank == 0:
-			print(f'Loading checkpoint from {checkpoint_path}, resuming training from epoch {start_epoch}')
-	else:
-		start_epoch, losses = 0, []
-
+	start_epoch, losses = 0, []
+	if not os.path.isfile(checkpoint_path):
 		if rank == 0:
 			print(f'Checkpoint not found at: {checkpoint_path}, using random initialization')
+
+		return start_epoch, losses
+
+	checkpoint = torch.load(checkpoint_path, map_location='cpu')
+
+	# Ensuring full precision
+	model_weights = wrap_weights(checkpoint['model_state_dict'])
+	for key, value in model_weights.items():
+		model_weights[key] = value.float()
+
+	model.load_state_dict(model_weights)
+
+	if 'optimizer_state_dict' in checkpoint:
+		optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+	if 'schedueler_state_dict' in checkpoint:
+		schedueler.load_state_dict(checkpoint['schedueler_state_dict'])
+
+	if 'epoch' in checkpoint:
+		start_epoch = checkpoint['epoch'] + 1
+
+	if 'losses' in checkpoint:
+		losses = checkpoint['losses']
+		
+	if not isinstance(losses, list): losses = [losses]
+
+	if rank == 0:
+		print(f'Loading checkpoint from {checkpoint_path}, resuming training from epoch {start_epoch}')
+
+	return start_epoch, losses
+
+
+def wrap_weights(state_dict):
+	new_state_dict = {}
+
+	for key, value in state_dict.items():
+		new_key = f"module.{key}" if not key.startswith("module.") else key
+		new_state_dict[new_key] = value
+
+	return new_state_dict
 
 
 def initialize_arguments(**kwargs):
@@ -213,7 +234,7 @@ def initialize_arguments(**kwargs):
 	args.data_type = 'train'
 	args.video_ids = args.video_ids.split(',')
 
-	if args.checkpoint is not None:
+	if args.checkpoint is None:
 		args.checkpoint = CONFIG['checkpoint']
 
 	if torch.cuda.is_available():
