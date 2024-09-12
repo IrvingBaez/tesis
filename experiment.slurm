@@ -25,13 +25,8 @@ export CUDA_VISIBLE_DEVICES=0,1 #,2,3
 # For torch.nn.parallel.DistributedDataParallel
 export MASTER_ADDR='localhost'
 export MASTER_PORT='12355'
-# export NCCL_P2P_DISABLE='1'
 export TORCH_NCCL_BLOCKING_WAIT=1
 export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
-
-# For cuda debugging
-# export TORCH_USE_CUDA_DSA=1
-# export CUDA_LAUNCH_BLOCKING=1
 
 python3 model/experiments.py
 # python3 model/tools/der_and_losses.py

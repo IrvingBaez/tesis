@@ -3,7 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 
 
-class RelationLayer(nn.Module):
+class RelationLayerCrossAttention(nn.Module):
 	def __init__(self, config):
 		super().__init__()
 
@@ -25,15 +25,7 @@ class RelationLayer(nn.Module):
 			nn.Sigmoid()
 		)
 
-		self.cross_attention = nn.MultiheadAttention(embed_dim=C, num_heads=8)
-		# self.attention = nn.Sequential(
-		# 	nn.Conv1d(config.num_filters[3] * outmap_size, 128, kernel_size=1),
-		# 	nn.ReLU(),
-		# 	nn.BatchNorm1d(128),
-		# 	nn.Conv1d(128, config.num_filters[3] * outmap_size, kernel_size=1),
-		# 	nn.Softmax(dim=2),
-		# )
-
+		self.attention = AudioVisualAttention()
 		self.task_token = nn.Embedding(4, 1536)
 
 		self._init_parameters()
@@ -85,8 +77,8 @@ class RelationLayer(nn.Module):
 	def forward(self, video, audio, visible, targets):
 		audio = self.batch_norm_audio(audio)
 
-		video_audio_attention, _ = self.cross_attention(audio, video, video)
-		support, query, token, label = self.divide_set(video_audio_attention, video, audio, visible, targets)
+		av_attention = self.attention(audio, video)
+		support, query, token, label = self.divide_set(video, av_attention, visible, targets)
 
 		N, Q, S, C, H, W = query.shape
 		x1 = torch.cat((support, query), dim=3).reshape(N*S*Q, 2*C, H, W)
@@ -214,3 +206,39 @@ class MLP(nn.Module):
 			x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
 
 		return x
+
+
+class AudioVisualAttention(nn.Module):
+	def __init__(self, *args, **kwargs) -> None:
+		super().__init__(*args, **kwargs)
+
+		self.bottle_neck = nn.Linear(512, 256)
+		self.cross_attention = nn.MultiheadAttention(embed_dim=256, num_heads=8)
+
+	def forward(self, audio, video):
+		# video: [2, 40, 512, 7, 7]
+		# audio: [2, 40, 256, 7, 7]
+
+		N, T, C_v, H, W = video.shape
+		_, _, C_a, _, _ = audio.shape
+
+		# Project dim 2 to size 256.
+		video = video.view(N, T, C_v, H * W)  # [N, T, 512, 49]
+		video = video.permute(0, 1, 3, 2)  # [N, T, 49, 512]
+		video = self.bottle_neck(video)
+		video = video.permute(0, 1, 3, 2).view(N, T, 256, H, W)  # [N, T, 256, 7, 7]
+
+		# Flatten spacial dimensions
+		video = video.view(N, T, 256, H * W)  # [N, T, 256, 49]
+		audio = audio.view(N, T, 256, H * W)  # [N, T, 256, 49]
+
+		# Reshape to (L, N, E): Lenght, Number, Embeddings
+		video = video.permute(3, 0, 2, 1).reshape(H * W, N * T, 256)  # [49, N*T, 256]
+		audio = audio.permute(3, 0, 2, 1).reshape(H * W, N * T, 256)  # [49, N*T, 256]
+
+		output, _ = self.cross_attention(query=audio, key=video, value=video)
+
+		# Back to original shape (N, T, 256, H, W)
+		output = output.view(H * W, N, T, 256).permute(1, 2, 3, 0).view(N, T, 256, H, W)
+
+		return output

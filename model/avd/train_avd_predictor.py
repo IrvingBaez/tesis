@@ -18,7 +18,8 @@ def train_avd_predictor(args):
 			'labs_path': 		args.labs_path,
 			'frames_path': 	args.frames_path,
 			'rttms_path': 	args.rttms_path,
-			'sys_path': 		args.sys_path
+			'sys_path': 		args.sys_path,
+			'epochs':				args.epochs
 		}
 		train_avr_net(**arguments)
 
@@ -67,6 +68,7 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--asd_detector', type=str, default="ground_truth", help='Active speacker detection used for face cropping')
 	parser.add_argument('--avd_detector', type=str, default="avr_net", 			help='Model to use for audio visual diarozation')
 	parser.add_argument('--aligned', 			action='store_true', 							help='Used aligned frame crops')
+	parser.add_argument('--epochs', 			type=int, default=100,						help='Used aligned frame crops')
 
 	args = util.argparse_helper(parser, **kwargs)
 

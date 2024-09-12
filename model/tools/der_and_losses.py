@@ -108,7 +108,7 @@ def der_and_losses(args):
 def initialize_arguments(**kwargs):
 	parser = argparse.ArgumentParser(description = "Arguments for data preprocessing")
 
-	parser.add_argument('--ckpt_path',		type=str, default="model/third_party/avr_net/checkpoints", help='Checkpoints to score')
+	parser.add_argument('--ckpt_path',		type=str, default="model/third_party/avr_net/checkpoints_attention", help='Checkpoints to score')
 	parser.add_argument('--outs_path', 		type=str, default="model/tools", help='Where to save the outputs of this script')
 	args = util.argparse_helper(parser, **kwargs)
 

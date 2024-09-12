@@ -1,6 +1,7 @@
 import torch.nn as nn
 
-from model.third_party.avr_net.models.relation_layer import RelationLayer
+# from model.third_party.avr_net.models.relation_layer import RelationLayer
+from model.third_party.avr_net.models.relation_layer_cross_attention import RelationLayerCrossAttention
 from model.third_party.avr_net.models.audio_encoder import AudioEncoder
 from model.third_party.avr_net.models.video_encoder import VideoEncoder
 
@@ -14,7 +15,8 @@ class AVRNET(nn.Module):
 	def build(self):
 		self.audio_encoder	= AudioEncoder(self.config['audio'])
 		self.video_encoder	= VideoEncoder(self.config['video'])
-		self.relation_layer	= RelationLayer(self.config['relation'])
+		# self.relation_layer	= RelationLayer(self.config['relation'])
+		self.relation_layer	= RelationLayerCrossAttention(self.config['relation'])
 
 	def train(self, mode=True):
 		super().train(mode)

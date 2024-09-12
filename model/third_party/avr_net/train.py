@@ -79,16 +79,10 @@ def train(rank, world_size, args):
 
 	os.makedirs(f'{args.sys_path}/features')
 
-	# Load data
-	dataset = TrainDataset(args)
-	sampler = TrainSampler(dataset, num_replicas=world_size, rank=rank)
-	dataloader = DataLoader(dataset, sampler=sampler, batch_size=args.gpu_batch_size, num_workers=args.world_size, pin_memory=True, collate_fn=TrainCollator())
-
-	# Load prepare model and optimizer data
+	sampler, dataloader = load_data(rank, world_size, args)
 	model, optimizer_params = load_model(rank)
-	optimizer = Adam(optimizer_params, lr=args.learning_rate, weight_decay=args.weight_decay)
-	scheduler = MultiStepScheduler(optimizer)
-	criterion = MSELoss()
+	optimizer, scheduler, criterion = load_optimizers(optimizer_params, args)
+
 	start_epoch, losses = load_checkpoint(rank, args.checkpoint, model, optimizer, scheduler)
 	total_epochs = start_epoch + args.epochs
 	model.train()
@@ -99,15 +93,9 @@ def train(rank, world_size, args):
 
 		batches_pb = tqdm(total=len(dataloader), desc='Batches', leave=False)
 		for batch in dataloader:
-			if rank == 0:  # Only rank 0 to avoid clutter, or print for all ranks if needed
-				print(f"[Rank {rank}] Epoch {epoch} - \n\tAudio size: {batch['audio'].shape}, \n\tFrames size: {batch['frames'].shape}\n\tTargets size {batch['targets'].shape}")
-
 			torch.cuda.synchronize(rank)
 
-			# batch = self._mount_batch(batch, device)
 			model_output = model(batch, exec='train')
-
-			# Synchronize GPUs before grad step
 			torch.cuda.synchronize(rank)
 
 			batch.update(model_output)
@@ -132,6 +120,22 @@ def train(rank, world_size, args):
 	cleanup()
 
 
+def load_data(rank, world_size, args):
+	dataset = TrainDataset(args)
+	sampler = TrainSampler(dataset, num_replicas=world_size, rank=rank)
+	dataloader = DataLoader(dataset, sampler=sampler, batch_size=args.gpu_batch_size, num_workers=args.world_size, pin_memory=True, collate_fn=TrainCollator())
+
+	return sampler, dataloader
+
+
+def load_optimizers(optimizer_params, args):
+	optimizer = Adam(optimizer_params, lr=args.learning_rate, weight_decay=args.weight_decay)
+	scheduler = MultiStepScheduler(optimizer)
+	criterion = MSELoss()
+
+	return optimizer, scheduler, criterion
+
+
 def load_model(rank):
 	device = torch.device(f'cuda:{rank}' if torch.cuda.is_available() else "cpu")
 	model = AVRNET(CONFIG)
@@ -153,7 +157,7 @@ def load_model(rank):
 def save_checkpoint(rank, epoch, model, optimizer, scheduler, losses):
 	if rank != 0: return
 
-	save_dir = 'model/third_party/avr_net/checkpoints'
+	save_dir = 'model/third_party/avr_net/checkpoints_attention'
 	os.makedirs(save_dir, exist_ok=True)
 
 	timestamp = datetime.now().strftime('%Y_%m_%d_%H:%M:%S')
@@ -170,6 +174,12 @@ def save_checkpoint(rank, epoch, model, optimizer, scheduler, losses):
 
 def load_checkpoint(rank, checkpoint_path, model, optimizer, schedueler):
 	start_epoch, losses = 0, []
+	if not checkpoint_path:
+		if rank == 0:
+			print(f'No checkpoint provided, using random initialization')
+
+		return start_epoch, losses
+
 	if not os.path.isfile(checkpoint_path):
 		if rank == 0:
 			print(f'Checkpoint not found at: {checkpoint_path}, using random initialization')
@@ -183,7 +193,7 @@ def load_checkpoint(rank, checkpoint_path, model, optimizer, schedueler):
 	for key, value in model_weights.items():
 		model_weights[key] = value.float()
 
-	model.load_state_dict(model_weights)
+	model.load_state_dict(model_weights, strict=False)
 
 	if 'optimizer_state_dict' in checkpoint:
 		optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -240,8 +250,9 @@ def initialize_arguments(**kwargs):
 	args.data_type = 'train'
 	args.video_ids = args.video_ids.split(',')
 
-	if args.checkpoint is None:
-		args.checkpoint = CONFIG['checkpoint']
+	# COMENTADO PARA ENTRENAR ATENCIÓN DESDE 0
+	# if args.checkpoint is None:
+	# 	args.checkpoint = CONFIG['checkpoint']
 
 	if torch.cuda.is_available():
 		args.world_size = torch.cuda.device_count()

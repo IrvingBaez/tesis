@@ -35,6 +35,8 @@ class CustomDataset(Dataset):
 		self.processors.append(AudioNormalize({'desired_rms': 0.1, 'eps': 0.0001}))
 		self.processors.append(AudioTransform())
 
+		self._load_dataset()
+
 
 	def __len__(self):
 		return len(self.items)
@@ -127,7 +129,7 @@ class CustomDataset(Dataset):
 
 
 	# TODO: this function does too much stuff.
-	def load_dataset(self):
+	def _load_dataset(self):
 		waves_path 	= self.waves_path
 		vad_path 		= self.labs_path
 
