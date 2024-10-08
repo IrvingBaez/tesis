@@ -1,7 +1,6 @@
 import torch.nn as nn
 
-# from model.third_party.avr_net.models.relation_layer import RelationLayer
-from model.third_party.avr_net.models.relation_layer_cross_attention import RelationLayerCrossAttention
+from model.third_party.avr_net.models.relation_layer import RelationLayer
 from model.third_party.avr_net.models.audio_encoder import AudioEncoder
 from model.third_party.avr_net.models.video_encoder import VideoEncoder
 
@@ -12,11 +11,12 @@ class AVRNET(nn.Module):
 		self.config = config
 
 
-	def build(self):
-		self.audio_encoder	= AudioEncoder(self.config['audio'])
-		self.video_encoder	= VideoEncoder(self.config['video'])
-		# self.relation_layer	= RelationLayer(self.config['relation'])
-		self.relation_layer	= RelationLayerCrossAttention(self.config['relation'])
+	def build(self, relation_layer='original'):
+		self.audio_encoder	= AudioEncoder(self.config['audio']['init_weight'])
+		self.video_encoder	= VideoEncoder(self.config['video']['init_weight'])
+
+		self.relation_layer	= RelationLayer()
+
 
 	def train(self, mode=True):
 		super().train(mode)
@@ -24,8 +24,7 @@ class AVRNET(nn.Module):
 			for module in self.audio_encoder.modules():
 				if isinstance(module, nn.BatchNorm2d):
 					module.eval()
-					module.weight.requires_grad = False
-					module.bias.requires_grad = False
+
 
 		if self.config['video']['fix_layers']:
 			for module in self.video_encoder.modules():
@@ -68,6 +67,6 @@ class AVRNET(nn.Module):
 			output['visible']			= batch['visible']
 			output['losses']			= {}
 		elif exec == 'relation':
-			output['scores']			= self.relation_layer.predict(batch['video'], batch['audio'], batch['task_full'])
+			output['scores']			= self.relation_layer(batch['video'], batch['audio'], batch['task_full'])
 
 		return output

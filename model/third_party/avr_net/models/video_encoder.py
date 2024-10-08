@@ -3,13 +3,13 @@ from torch import nn
 
 
 class VideoEncoder(nn.Module):
-	def __init__(self, config):
+	def __init__(self, init_weight):
 		super().__init__()
-		self.layers										= config['layers']
-		self.fix_layers								= config['fix_layers']
-		self.init_weight							= config['init_weight']
-		self.inplanes									= config['inplanes']
-		self.num_features							= config['num_features']
+		self.layers										= [3, 4, 14, 3]
+		self.fix_layers								= 'all'
+		self.init_weight							= init_weight
+		self.inplanes									= 64
+		self.num_features							= 512
 		self.fp16											= False
 		self.dilation									= 1
 		self.groups										= 1
@@ -87,8 +87,7 @@ class VideoEncoder(nn.Module):
 				parameter.requires_grad = False
 
 
-	def forward(self, batch):
-		x = batch['frames']
+	def forward(self, x):
 		N, S, C, D, H, W = x.shape
 
 		x = x.transpose(2, 3).reshape(N*S*D, C, H, W)

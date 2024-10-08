@@ -4,7 +4,6 @@ from datetime import datetime
 from model.avd.score_avd import main as score_avd
 
 from model.third_party.avr_net.predict import main as avr_net
-# from model.third_party.avar_net.predict import main as avar_net
 
 def perform_avd(args):
 	arguments = {
@@ -13,6 +12,7 @@ def perform_avd(args):
 		'videos_path':	args.videos_path,
 		'waves_path': 	args.waves_path,
 		'labs_path': 		args.labs_path,
+		'rttms_path': 	args.rttms_path,
 		'frames_path': 	args.frames_path,
 		'tracks_path': 	args.tracks_path,
 		'sys_path': 		args.sys_path
@@ -67,6 +67,7 @@ def initialize_arguments(**kwargs):
 	args.videos_path	= util.get_path('videos_path')
 	args.waves_path 	= util.get_path('waves_path', denoiser=args.denoiser)
 	args.labs_path 		= util.get_path('vad_path', vad_detector=args.vad_detector) + '/predictions'
+	args.rttms_path 	= util.get_path('avd_path', avd_detector='ground_truth') + '/predictions'
 
 	asd_path 					= util.get_path('asd_path', asd_detector=args.asd_detector)
 	args.frames_path 	= f'{asd_path}/aligned_tracklets' if args.aligned else f'{asd_path}/tracklets'

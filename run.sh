@@ -20,9 +20,4 @@ export MASTER_PORT='12355'
 export TORCH_NCCL_BLOCKING_WAIT=1
 export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
 
-program="model/experiments.py"
-if [ "$#" -gt 0 ]; then
-    program="$@"
-fi
-
-python3 $program
+python3 model/experiments.py

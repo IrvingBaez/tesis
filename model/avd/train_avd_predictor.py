@@ -19,20 +19,21 @@ def train_avd_predictor(args):
 			'frames_path': 	args.frames_path,
 			'rttms_path': 	args.rttms_path,
 			'sys_path': 		args.sys_path,
-			'epochs':				args.epochs
+			'epochs':				args.epochs,
+			'checkpoint':		args.checkpoint
 		}
 		train_avr_net(**arguments)
 
-		arguments['data_type'] = args.val_data_type
-		arguments['video_ids'] = ','.join(args.val_video_ids)
-		arguments['weights_path'] = sorted(glob('model/third_party/avr_net/checkpoints/*.ckpt'))[-1]
-		del arguments['rttms_path']
-		predict(**arguments)
+	# 	arguments['data_type'] = args.val_data_type
+	# 	arguments['video_ids'] = ','.join(args.val_video_ids)
+	# 	arguments['weights_path'] = sorted(glob('model/third_party/avr_net/checkpoints/*.ckpt'))[-1]
+	# 	del arguments['rttms_path']
+	# 	predict(**arguments)
 
-	args.weights = arguments['weights_path']
-	score = score_avd_validation(args)
-	print(f'DER: {score}')
-	return score
+	# args.weights = arguments['weights_path']
+	# score = score_avd_validation(args)
+	# print(f'DER: {score}')
+	# return score
 
 
 def score_avd_validation(args):
@@ -68,7 +69,8 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--asd_detector', type=str, default="ground_truth", help='Active speacker detection used for face cropping')
 	parser.add_argument('--avd_detector', type=str, default="avr_net", 			help='Model to use for audio visual diarozation')
 	parser.add_argument('--aligned', 			action='store_true', 							help='Used aligned frame crops')
-	parser.add_argument('--epochs', 			type=int, default=100,						help='Used aligned frame crops')
+	parser.add_argument('--epochs', 			type=int, default=100,						help='Epochs to add to the training of the checkpoint')
+	parser.add_argument('--checkpoint', 	type=str, default=None,						help='Path of checkpoint to continue training')
 
 	args = util.argparse_helper(parser, **kwargs)
 

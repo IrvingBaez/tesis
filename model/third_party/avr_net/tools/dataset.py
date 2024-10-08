@@ -6,26 +6,28 @@ import soundfile
 import torch
 import glob
 import cv2
-
-# Documentation: https://pytorch.org/tutorials/beginner/basics/data_tutorial.html#creating-a-custom-dataset-for-your-files
+from tqdm.auto import tqdm
 
 
 class CustomDataset(Dataset):
-	# DATASET CONFIG: {'data_dir': './dataset/', 'max_frame': 200, 'min_frame': 20, 'step_frame': 50, 'snippet_length': 1, 'missing_rate': 0, 'processors': {'face_pad_processor': {'type': 'face_pad', 'params': {'length': 1}}, 'face_to_tensor_processor': {'type': 'face_to_tensor', 'params': {}}, 'face_resize_processor': {'type': 'face_resize', 'params': {'dest_size': [112, 112]}}, 'face_normalize_processor': {'type': 'face_normalize', 'params': {'mean': 0.5, 'std': 0.5}}, 'audio_normalize_processor': {'type': 'audio_normalize', 'params': {'desired_rms': 0.1, 'eps': 0.0001}}, 'audio_to_tensor_processor': {'type': 'audio_to_tensor', 'params': {}}}, 'sampler': {}}
-	def __init__(self, args):
+	def __init__(self, config, training=True):
 		super().__init__()
-		self.snippet_length = 1
-		self._max_frames = 200
-		self._min_frames = 20
-		self._step_frame = 50
-		# self.batch_size = 10
-		# self._missing_rate = 0
+		self.snippet_length	= 1
+		self._max_frames		= 200
+		self._min_frames		= 20
+		self._step_frame		= 50
 
-		# self.videos_path	= args.videos_path
-		self.video_ids		= args.video_ids
-		self.waves_path		= args.waves_path
-		self.labs_path		= args.labs_path
-		self.frames_path	= args.frames_path
+		# TODO: Implement
+		self.missing_rate 	= 0
+
+		self.video_ids		= config['video_ids']
+		self.waves_path		= config['waves_path']
+		self.rttms_path		= config['rttms_path']
+		self.labs_path		= config['labs_path']
+		self.frames_path	= config['frames_path']
+
+		self.training = training
+		assert self.training == bool(self.rttms_path), 'Training mode requires rttms_path'
 
 		self.processors = []
 		self.processors.append(FacePad({'length': 1}))
@@ -33,7 +35,10 @@ class CustomDataset(Dataset):
 		self.processors.append(FaceResize({'dest_size': [112, 112]}))
 		self.processors.append(FaceNormalize({'mean': 0.5, 'std': 0.5}))
 		self.processors.append(AudioNormalize({'desired_rms': 0.1, 'eps': 0.0001}))
-		self.processors.append(AudioTransform())
+		self.processors.append(AudioToTensor())
+
+		self.items = []
+		self.entity_to_index = []
 
 		self._load_dataset()
 
@@ -42,51 +47,42 @@ class CustomDataset(Dataset):
 		return len(self.items)
 
 
-	def __getitem__(self, indices):
-		if isinstance(indices, int): indices = [[indices]]
-
-		samples = [[self._get_one_item(index) for index in pair] for pair in indices]
-
-		return samples
-
-
-	def _get_one_item(self, index) -> dict:
-		sample = self._load_video(self.items[index])
+	def __getitem__(self, index):
+		sample = self._load_video(index)
 
 		for processor in self.processors:
 			sample = processor(sample)
 
-		sample['targets'] = None
+		sample['targets'] = self._get_target(index) if self.training else None
 		sample['meta'].update(self._get_meta(index))
 
 		return sample
 
 
-	def _load_video(self, item: tuple) -> dict:
-		"""Loads one frame-audio pair"""
+	def _load_video(self, index):
+		item = self.items[index]
+		frames = self._load_frames(item['image_paths'])
 
-		audio = self._load_wave(item)
-		frames = self._load_frames(item[4])
-		sample = {}
-
-		sample['frames'] = frames
-		sample['audio'] = audio
-		sample['visible'] = torch.tensor([len(frames) > 0])
-		sample['meta'] = {}
+		sample = {
+			'frames':		frames,
+			'audio':		self._load_audio(item),
+			'visible':	torch.tensor([len(frames) > 0]),
+			'meta':			{}
+		}
 
 		return sample
 
 
-	def _load_wave(self, item):
-		audio, sample_rate = soundfile.read(item[0])
+	def _load_audio(self, item):
+		audio, sample_rate = soundfile.read(item['wave_path'])
 
-		start, dura = item[1] - item[3], item[2]
-		start, dura = round(start, 6), round(dura, 6)
-		audio = audio[int(start * sample_rate) : int((start + dura) * sample_rate)]
+		start, duration = item['start'] - item['offset'], item['duration']
+		start, duration = round(start, 6), round(duration, 6)
+		audio = audio[int(start * sample_rate) : int((start + duration) * sample_rate)]
 
 		audiosize = audio.shape[0]
 		if audiosize == 0:
-			raise RuntimeError('Audio length is zero, check the file')
+			raise RuntimeError(f'Audio length is zero, check the file {item['wave_path']}. With item: {item}')
 
 		max_audio = self._max_frames * int(sample_rate / 100)
 
@@ -103,92 +99,155 @@ class CustomDataset(Dataset):
 
 
 	def _load_frames(self, frame_paths):
-		if len(frame_paths) > 0:
-			indices = [0] # torch.randint(0, len(frame_paths), [self.snippet_length])
-			frames = np.array([cv2.cvtColor(cv2.imread(frame_paths[i]), cv2.COLOR_BGR2RGB) for i in indices])
-		else:
-			frames = np.array([], dtype=np.uint8)
+		frames = []
+		for frame_path in frame_paths:
+			frames.append(cv2.cvtColor(cv2.imread(frame_path), cv2.COLOR_BGR2RGB))
+
+		frames = np.array(frames, dtype=np.uint8)
 
 		return frames
 
 
+	def _get_target(self, index):
+		uid = self.items[index]['entity_id']
+		target = torch.LongTensor([self.entity_to_index[uid]])
+
+		return target
+
+
 	def _get_meta(self, index):
-		if len(self.items[index][-2]) > 0:
-			track, id, _, _, _ = self.items[index][-2][0].split('/')[-1].rsplit('.', 1)[0].split(':')
+		item = self.items[index]
+
+		if len(item['image_paths']) > 0:
+			track, id, _, _, _ = item['image_paths'][0].split('/')[-1].rsplit('.', 1)[0].split(':')
 			trackid = track + ':' + id
 		else:
-				trackid = 'NA'
+			trackid = 'NA'
 
 		meta = {
-			'video': self.items[index][-1],
-			'start': self.items[index][1],
-			'end': self.items[index][1] + self.items[index][2],
-			'trackid': trackid
+			'video':		item['video_id'],
+			'start':		item['start'],
+			'end':			item['start'] + item['duration'],
+			'trackid':	trackid
 		}
 		return meta
 
 
-	# TODO: this function does too much stuff.
 	def _load_dataset(self):
 		waves_path 	= self.waves_path
-		vad_path 		= self.labs_path
 
 		maxs = self._max_frames / 100.0
 		mins = self._min_frames / 100.0
 		step = self._step_frame / 100.0
 
-		self.items = []
+		for video_id in tqdm(sorted(self.video_ids), desc='Loading dataset', leave=False):
+			offset = 600.0 + int(video_id[-2:]) * 300.0
 
-		# parse audio and face segments
-		for video_id in sorted(self.video_ids):
-			vad_file_path = f'{vad_path}/{video_id}.lab'
+			if self.training:
+				speech_segments, entity_ids = self._rttm_speech_segments(video_id)
+			else:
+				speech_segments = self._vad_speech_segments(video_id)
 
-			with open(vad_file_path, 'r') as f:
-				speech_segments = f.readlines()
+			video_faces = self._video_faces(video_id)
 
-			offset = 600.0 + float(video_id.rsplit('_', 1)[-1]) * 300.0
-
-			image_paths = glob.glob(f'{self.frames_path}/{video_id}/*.*')
-			image_paths = sorted(image_paths)
-			faces = defaultdict(lambda: defaultdict(list))
-
-			for image_path in image_paths:
-				# ['2XeFK-DTSZk_0960_1020', '23', '983.89', '1', 'spk01']
-				track, id, timestamp, _, _ = image_path.split('/')[-1].rsplit('.', 1)[0].split(':')
-				trackid = f'{track}:{id}'
-				faces[float(timestamp)][trackid].append(image_path)
-
-			for segment in speech_segments:
-				item = segment.split()
-				start = float(item[0])
-				end = float(item[1])
-
-				items = []
-				timestamps = np.sort(np.array(list(faces.keys())))
-
+			for index, (start, end) in enumerate(speech_segments):
 				# Splits segments if they are too long (2.0s), skips them if they are too short (0.2s)
 				for seg_start in np.arange(start, end, step):
-					if seg_start < offset: seg_start = offset
+					seg_start = max(seg_start, offset)
 					duration = round(min(maxs, end - seg_start), 6)
 
-					if seg_start + duration > offset + 300.0: continue
+					if offset + 300.0 < seg_start + duration: continue
 					if duration < mins: continue
 
-					segment_timestamps = timestamps[np.searchsorted(timestamps, seg_start) : np.searchsorted(timestamps, round(seg_start+duration, 6))]
-					segment_faces = defaultdict(list)
+					if self.training:
+						self.entity_to_index.append(entity_ids[index])
 
-					for timestamp in segment_timestamps:
-						face = faces[timestamp]
-						for key, value in face.items():
-							# list of dicts, where keys are trackid and values are image paths.
-							segment_faces[key].extend(value)
+					faces_in_segment = self._faces_in_segment(video_faces, seg_start, duration)
 
-					if len(segment_faces) > 0:
-						for _, image_paths in segment_faces.items():
-							items.append((f'{waves_path}/{video_id}.wav', seg_start, duration, offset, image_paths, video_id))
+					if len(faces_in_segment) > 0:
+						for _, image_paths in faces_in_segment.items():
+							self.items.append({
+								'wave_path':		f'{waves_path}/{video_id}.wav',
+								'start':				seg_start,
+								'duration':			duration,
+								'offset':				offset,
+								'image_paths':	image_paths,
+								'video_id':			video_id,
+								'entity_id':		entity_ids[index] if self.training else None
+							})
 					else:
 						# offscreen speaker
-						items.append((f'{waves_path}/{video_id}.wav', seg_start, duration, offset, [], video_id))
+						self.items.append({
+							'wave_path':		f'{waves_path}/{video_id}.wav',
+							'start':				seg_start,
+							'duration':			duration,
+							'offset':				offset,
+							'image_paths':	[],
+							'video_id':			video_id,
+							'entity_id':		entity_ids[index] if self.training else None
+						})
 
-				# Tuple: (wave_path, segment_start, segment_duration, offset, [image paths], video_id)
-				self.items.extend(items)
+		if self.training:
+			self.entity_to_index = sorted(list(set(self.entity_to_index)))
+			self.entity_to_index = { uid: i for i, uid in enumerate(self.entity_to_index) }
+
+
+	def _vad_speech_segments(self, video_id):
+		vad_path = f'{self.labs_path}/{video_id}.lab'
+
+		with open(vad_path, 'r') as f:
+			lines = f.readlines()
+
+		segments = []
+		for line in lines:
+			start, end, _ = line.split()
+			segments.append((float(start), float(end)))
+
+		return segments
+
+
+	def _rttm_speech_segments(self, video_id):
+		rttm_path = f'{self.rttms_path}/{video_id}.rttm'
+
+		with open(rttm_path, 'r') as f:
+			lines = f.readlines()
+
+		segments = []
+		entity_ids = []
+		for line in lines:
+			_, _, _, start, duration, _, _, spk_id, _, _ = line.split()
+			segments.append((float(start), float(start) + float(duration)))
+			entity_ids.append(f'{video_id}:{spk_id}')
+
+		return segments, entity_ids
+
+
+	def _video_faces(self, video_id):
+		image_paths = glob.glob(f'{self.frames_path}/{video_id}/*.*')
+		image_paths = sorted(image_paths)
+		faces = defaultdict(lambda: defaultdict(list))
+
+		for image_path in image_paths:
+			# ['2XeFK-DTSZk_0960_1020', '23', '983.89', '1', 'spk01']
+			track, id, timestamp, _, _ = image_path.split('/')[-1].rsplit('.', 1)[0].split(':')
+			trackid = f'{track}:{id}'
+			faces[float(timestamp)][trackid].append(image_path)
+
+		timestamps = np.sort(np.array(list(faces.keys())))
+
+		return faces, timestamps
+
+
+	def _faces_in_segment(self, video_faces, start, duration):
+		faces, timestamps = video_faces
+
+		segment_timestamps = timestamps[np.searchsorted(timestamps, start) : np.searchsorted(timestamps, round(start + duration, 6))]
+		segment_faces = defaultdict(list)
+
+		for timestamp in segment_timestamps:
+			face = faces[timestamp]
+			for key, value in face.items():
+				# list of dicts, where keys are trackid and values are image paths.
+				segment_faces[key].extend(value)
+
+		return segment_faces

@@ -1,9 +1,11 @@
-import torch
+from datetime import datetime
 from glob import glob
+import torch
 from tqdm.auto import tqdm
 import pickle
 import argparse
 import matplotlib.pyplot as plt
+import numpy as np
 
 from model import util
 from model.third_party.avr_net.predict import main as predict
@@ -49,7 +51,7 @@ def score_args():
 	parser.add_argument('--aligned', 				type=bool, default=True)
 	parser.add_argument('--weights', 				type=str, default="")
 
-	args = parser.parse_args()
+	args = parser.parse_args([])
 	return args
 
 
@@ -76,33 +78,60 @@ def collect_losses(args):
 
 
 def calculate_scores(args):
-	scores = load_scores(args.scores_path)
+	all_scores = load_scores(args.scores_path)
+	current_scores = []
 	val_args = prediction_args()
-	scr_args = score_args()
+	scoring_args = score_args()
 
-	for path in tqdm(args.checkpoint_paths):
-		if path in scores.keys(): continue
+	for index, path in enumerate(tqdm(args.checkpoint_paths)):
+		if path in all_scores.keys():
+			print(f'{index:03d}: Already calculated')
+			current_scores.append(all_scores[path])
+			continue
+
+		if (index % args.test_every_n) != 0:
+			print(f'{index:03d}: Skipping due to arg test_every_n')
+			current_scores.append(None)
+			continue
+
+		if args.graph_ready:
+			print(f'{index:03d}: Skipping due to arg graph_ready')
+			current_scores.append(None)
+			continue
+
+		print(f'{index:03d}: Calculating...')
 
 		val_args['weights_path'] = path
-		scr_args.weights = path
+		scoring_args.weights = path
 
 		predict(**val_args)
-		scores[path] = score(scr_args)
+		all_scores[path] = score(scoring_args)
 
-		save_scores(scores, args.scores_path)
+		save_scores(all_scores, args.scores_path)
+		current_scores.append(all_scores[path])
 
-	return scores.values()
+	return current_scores
 
 
 def der_and_losses(args):
-	epochs, losses = collect_losses(args)
 	scores = calculate_scores(args)
+	epochs, losses = collect_losses(args)
 
-	plt.plot(epochs, scores, label = "scores")
-	plt.plot(epochs, losses, label = "losses")
+	epochs = np.array(epochs)
+	scores = np.array(scores).astype(np.double)
+	losses = np.array(losses).astype(np.double)
+
+	scores_mask = np.isfinite(scores)
+	losses_mask = np.isfinite(losses)
+
+	plt.plot(epochs[scores_mask], scores[scores_mask], label = "DER score")
+	plt.plot(epochs[losses_mask], losses[losses_mask], label = "losses")
+	plt.xlabel('Epoch')
+	plt.title("Training with Cross-Attention")
 	plt.legend()
 
-	plt.savefig(f'{args.outs_path}/der_and_losses.jpg')
+	timestamp = datetime.now().strftime('%Y_%m_%d_%H:%M:%S')
+	plt.savefig(f'{args.outs_path}/trainig_cross-attention_{timestamp}.jpg')
 
 
 def initialize_arguments(**kwargs):
@@ -110,6 +139,8 @@ def initialize_arguments(**kwargs):
 
 	parser.add_argument('--ckpt_path',		type=str, default="model/third_party/avr_net/checkpoints_attention", help='Checkpoints to score')
 	parser.add_argument('--outs_path', 		type=str, default="model/tools", help='Where to save the outputs of this script')
+	parser.add_argument('--test_every_n', type=int, default=5, help='Obtain one score every n weights.')
+	parser.add_argument('--graph_ready',	action='store_true', help='Graph ready scores without calculating new ones')
 	args = util.argparse_helper(parser, **kwargs)
 
 	args.scores_path = f'{args.outs_path}/losses_data.pckl'

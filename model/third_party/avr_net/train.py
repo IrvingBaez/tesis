@@ -1,205 +1,188 @@
 import argparse
 import os
-import time
 import torch
-
-from .avr_net import AVRNET
-from .tools.scheduler import MultiStepScheduler
-from .tools.train_collator import TrainCollator
-from .tools.train_dataset import TrainDataset
-from .tools.train_sampler import TrainSampler
-# from .tools.trainer import Trainer
-from .tools.losses import MSELoss
-from model.util import argparse_helper
 from shutil import rmtree
-
 from datetime import datetime
-import torch.distributed as dist
-import torch.multiprocessing as mp
-from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim.adam import Adam
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
+import matplotlib.pyplot as plt
 
+from model.util import argparse_helper, save_data, get_path
+from .models.relation_layer import RelationLayer
+from .tools.custom_collator import CustomCollator
+from .tools.dataset import CustomDataset
+from .tools.clustering_dataset import ClusteringDataset
+from .tools.feature_extractor import FeatureExtractor
+from .tools.attention import AudioVisualAttention
+from .tools.losses import MSELoss
 
-CONFIG = {
-	'audio': {
-		'layers': [3, 4, 6, 3],
-		'num_filters': [32, 64, 128, 256],
-		'encoder_type': 'ASP',
-		'n_mels': 64,
-		'log_input': True,
-		'fix_layers': 'all',
-		'init_weight': 'model/third_party/avr_net/weights/backbone_audio.pth'
-	},
-	'video': {
-		'layers': [3, 4, 14, 3],
-		'fix_layers': 'all',
-		'num_features': 512,
-		'inplanes': 64,
-		'init_weight': 'model/third_party/avr_net/weights/backbone_faces.pth'
-	},
-	'relation': {
-		'dropout': 0,
-		'num_way': 20,
-		'layers': [8, 6],
-		'num_shot': 2,
-		'num_filters': [256, 64]
-	},
-	'checkpoint': 'model/third_party/avr_net/weights/best_0.14_20.66.ckpt'
-}
-
-
-def setup(rank, world_size):
-	torch.backends.cudnn.benchmark = False
-	torch.autograd.set_detect_anomaly(True)
-
-	dist.init_process_group(
-		backend='nccl',
-		init_method='env://',
-		world_size=world_size,
-		rank=rank
-	)
-
-	torch.cuda.set_device(rank)
-	torch.cuda.empty_cache()
-	time.sleep(rank * 5)
-
-
-def cleanup():
-	dist.destroy_process_group()
-
-
-def train(rank, world_size, args):
-	setup(rank, world_size)
-
-	# Prepare directories
+def train(args):
 	if os.path.exists(args.sys_path):
 		rmtree(args.sys_path)
 
-	os.makedirs(f'{args.sys_path}/features')
+	os.makedirs(f'{args.sys_path}')
 
-	sampler, dataloader = load_data(rank, world_size, args)
-	model, optimizer_params = load_model(rank)
-	optimizer, scheduler, criterion = load_optimizers(optimizer_params, args)
+	with torch.no_grad():
+		train_features = extract_features(args, mode='train')
+		save_data(train_features, args.train_features_path)
+		val_features = extract_features(args, mode='vali')
+		save_data(val_features, args.val_features_path)
 
-	start_epoch, losses = load_checkpoint(rank, args.checkpoint, model, optimizer, scheduler)
-	total_epochs = start_epoch + args.epochs
-	model.train()
+	attention_model, relation_model = load_models(args)
+	attention_optimizer, relation_optimizer = load_optimizers(attention_model, relation_model, args)
+	# TODO: Add schedueler
+	# scheduler1 = optim.lr_scheduler.StepLR(optimizer1, step_size=30, gamma=0.1)
+	# scheduler2 = optim.lr_scheduler.StepLR(optimizer2, step_size=30, gamma=0.1)
 
-	epochs_pb = tqdm(initial=start_epoch, total=total_epochs, desc='Training')
-	for epoch in range(start_epoch, total_epochs):
-		sampler.set_epoch(epoch)
+	# # Al final de cada época
+	# scheduler1.step()
+	# scheduler2.step()
 
-		batches_pb = tqdm(total=len(dataloader), desc='Batches', leave=False)
-		for batch in dataloader:
-			torch.cuda.synchronize(rank)
-
-			model_output = model(batch, exec='train')
-			torch.cuda.synchronize(rank)
-
-			batch.update(model_output)
-			loss = criterion(batch['scores'], batch['targets'])
-			losses.append(loss)
-			loss.backward()
-
-			optimizer.step()
-			scheduler.step()
-
-			# Synchronize GPUs after grad step
-			torch.cuda.synchronize(rank)
-
-			if rank == 0:
-				batches_pb.update()
-
-		if rank == 0:
-			epochs_pb.update()
-			save_checkpoint(rank, epoch, model, optimizer, scheduler, losses)
-
-	rmtree(f'{args.sys_path}/features')
-	cleanup()
-
-
-def load_data(rank, world_size, args):
-	dataset = TrainDataset(args)
-	sampler = TrainSampler(dataset, num_replicas=world_size, rank=rank)
-	dataloader = DataLoader(dataset, sampler=sampler, batch_size=args.gpu_batch_size, num_workers=args.world_size, pin_memory=True, collate_fn=TrainCollator())
-
-	return sampler, dataloader
-
-
-def load_optimizers(optimizer_params, args):
-	optimizer = Adam(optimizer_params, lr=args.learning_rate, weight_decay=args.weight_decay)
-	scheduler = MultiStepScheduler(optimizer)
 	criterion = MSELoss()
 
-	return optimizer, scheduler, criterion
+	start_epoch, train_losses, val_losses = load_checkpoint()
+	total_epochs = start_epoch + args.epochs
+
+	train_dataloader = load_data(args.train_features_path)
+	val_dataloader = load_data(args.val_features_path)
+
+	for epoch in tqdm(range(start_epoch, total_epochs), initial=start_epoch, total=total_epochs, desc='Training'):
+		# ======================== Training Phase ========================
+		attention_model.train()
+		relation_model.train()
+		train_loss = 0.0
+
+		for batch in tqdm(train_dataloader, desc='Training', leave=False):
+			audio = attention_model(batch['video'], batch['audio'])
+			scores = relation_model(batch['video'], audio, batch['task_full'])
+
+			loss += criterion(scores, batch['targets'])
+			train_loss += loss.item()
+
+			attention_optimizer.zero_grad()
+			relation_optimizer.zero_grad()
+
+			train_loss.backward()
+
+			attention_optimizer.step()
+			relation_optimizer.step()
+
+		train_losses.append(train_loss)
+
+		# ======================== Validation Phase ========================
+		attention_model.eval()
+		relation_model.eval()
+		val_loss = 0.0
+
+		for batch in tqdm(val_dataloader, desc='Validating', leave=False):
+			video, audio = attention_model(batch['video'], batch['audio'])
+			scores = relation_model(video, audio, batch['task_full'])
+
+			loss += criterion(scores, batch['targets'])
+			val_loss += loss.item()
+
+		val_losses.append(val_loss)
+
+		# ======================== Saving data ========================
+		print(f'Epoch: {epoch}\tTrain Loss: {train_loss}\tVal Loss:{val_loss}')
+
+		timestamp = datetime.now().strftime('%Y_%m_%d_%H:%M:%S')
+		checkpoint_path = f'{args.checkpoint_dir}/attention_{timestamp}_epoch_{epoch:05d}.ckpt'
+
+		save_data({
+			'attention_model_state_dict': 		attention_model.state_dict(),
+			'relation_model_state_dict': 			relation_model.state_dict(),
+			'attention_optimizer_state_dict': attention_optimizer.state_dict(),
+			'relation_optimizer_state_dict': 	relation_optimizer.state_dict(),
+			'train_losses': train_losses,
+			'val_losses': val_losses,
+			'epoch': epoch
+		}, checkpoint_path)
+
+	graph_losses(train_losses, val_losses,f'{args.checkpoint_dir}/attention_{timestamp}_epoch_{epoch:05d}.png')
+	rmtree(f'{args.sys_path}/features')
 
 
-def load_model(rank):
-	device = torch.device(f'cuda:{rank}' if torch.cuda.is_available() else "cpu")
-	model = AVRNET(CONFIG)
-	model.build()
-
-	# Convert BatchNorm layers to SyncBatchNorm if using multiple GPUs
-	if torch.cuda.device_count() > 1:
-		model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-
-	model.to(device)
-	model = DDP(model, device_ids=[rank])
-	torch.cuda.synchronize()
-
-	optimizer_params = [{"params": list(model.parameters())}]
-
-	return model, optimizer_params
+def graph_losses(train_losses, val_losses, filename):
+	plt.figure(figsize=(10, 5))
+	plt.plot(train_losses, label='train losses')
+	plt.plot(val_losses, label='val losses')
+	plt.xlabel('Epochs')
+	plt.ylabel('Loss')
+	plt.title('Training and Validation Losses')
+	plt.legend()
+	plt.grid(True)
+	plt.savefig(filename)
+	plt.close()
 
 
-def save_checkpoint(rank, epoch, model, optimizer, scheduler, losses):
-	if rank != 0: return
+def extract_features(args, mode):
+	feature_extractor = FeatureExtractor()
+	feature_extractor.to(args.device)
 
-	save_dir = 'model/third_party/avr_net/checkpoints_attention'
-	os.makedirs(save_dir, exist_ok=True)
+	if mode == 'train':
+		config = args.train_dataset_config
+	else:
+		config = args.val_dataset_config
 
-	timestamp = datetime.now().strftime('%Y_%m_%d_%H:%M:%S')
-	checkpoint_path = f'{save_dir}/training_{timestamp}_epoch_{epoch:05d}.ckpt'
+	dataset = CustomDataset(config, training=True)
+	dataloader = DataLoader(dataset, batch_size=255, shuffle=False, num_workers=1, pin_memory=True, drop_last=False, collate_fn=CustomCollator())
+	dataloader = tqdm(dataloader, desc='Extracting features')
 
-	torch.save({
-		'epoch': epoch,
-		'model_state_dict': model.state_dict(),
-		'optimizer_state_dict': optimizer.state_dict(),
-		'schedueler_state_dict': scheduler.state_dict(),
-		'losses': losses
-	}, checkpoint_path)
+	feature_list = []
+	for batch in dataloader:
+		feature_list.append(feature_extractor(batch))
+
+	features = merge_features(feature_list)
+
+	return features
 
 
-def load_checkpoint(rank, checkpoint_path, model, optimizer, schedueler):
-	start_epoch, losses = 0, []
+def load_data(features_path):
+	dataset = ClusteringDataset(features_path)
+	dataloader = DataLoader(dataset, batch_size=1024, shuffle=False, num_workers=0, pin_memory=False, drop_last=False, collate_fn=CustomCollator())
+
+	return dataloader
+
+
+def load_optimizers(attention_model, relation_model, args):
+	attention_optimizer = Adam(attention_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+	relation_optimizer = Adam(relation_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+
+	return attention_optimizer, relation_optimizer
+
+
+def load_models(args):
+	attention_model = AudioVisualAttention()
+	attention_model.to(args.device)
+	attention_model.train()
+
+	relation_model = RelationLayer(args.checkpoint)
+	relation_model.to(args.device)
+	relation_model.train()
+
+	return attention_model, relation_model
+
+
+def load_checkpoint(checkpoint_path=None, model=None):
+	start_epoch, train_losses, val_losses = 0, [], []
 	if not checkpoint_path:
-		if rank == 0:
-			print(f'No checkpoint provided, using random initialization')
-
-		return start_epoch, losses
+		print(f'No checkpoint provided, using default initialization')
+		return start_epoch, train_losses, val_losses
 
 	if not os.path.isfile(checkpoint_path):
-		if rank == 0:
-			print(f'Checkpoint not found at: {checkpoint_path}, using random initialization')
-
+		print(f'Checkpoint not found at: {checkpoint_path}, using default initialization')
 		return start_epoch, losses
 
-	checkpoint = torch.load(checkpoint_path, map_location='cpu')
+	checkpoint = torch.load(checkpoint_path)
+	model.load_state_dict(checkpoint['model_state_dict'])
 
-	# Ensuring full precision
-	model_weights = wrap_weights(checkpoint['model_state_dict'])
-	for key, value in model_weights.items():
-		model_weights[key] = value.float()
+	# if 'optimizer_state_dict' in checkpoint:
+	# 	optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
-	model.load_state_dict(model_weights, strict=False)
-
-	if 'optimizer_state_dict' in checkpoint:
-		optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-
-	if 'schedueler_state_dict' in checkpoint:
-		schedueler.load_state_dict(checkpoint['schedueler_state_dict'])
+	# if 'schedueler_state_dict' in checkpoint:
+	# 	schedueler.load_state_dict(checkpoint['schedueler_state_dict'])
 
 	if 'epoch' in checkpoint:
 		start_epoch = checkpoint['epoch'] + 1
@@ -209,20 +192,24 @@ def load_checkpoint(rank, checkpoint_path, model, optimizer, schedueler):
 
 	if not isinstance(losses, list): losses = [losses]
 
-	if rank == 0:
-		print(f'Loading checkpoint from {checkpoint_path}, resuming training from epoch {start_epoch}')
+	print(f'Loading checkpoint from {checkpoint_path}, resuming training from epoch {start_epoch}')
 
 	return start_epoch, losses
 
 
-def wrap_weights(state_dict):
-	new_state_dict = {}
+def merge_features(dicts):
+	features = dicts[0]
 
-	for key, value in state_dict.items():
-		new_key = f"module.{key}" if not key.startswith("module.") else key
-		new_state_dict[new_key] = value
+	for batch in dicts[1:]:
+		for key, value in batch.items():
+			if isinstance(value, list):
+				features[key].extend(value)
+			elif isinstance(value, torch.Tensor):
+				features[key] = torch.cat((features[key], value))
+			elif isinstance(value, dict):
+				features[key] = merge_features([features[key], value])
 
-	return new_state_dict
+	return features
 
 
 def initialize_arguments(**kwargs):
@@ -239,16 +226,44 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--sys_path',				type=str,	help='Path to the folder where to save all the system outputs')
 
 	# TRAINING CONFIGURATION
-	parser.add_argument('--gpu_batch_size',	type=int,	help='Training batch size per GPU', default=2)
+	parser.add_argument('--gpu_batch_size',	type=int,	help='Training batch size per GPU', default=4)
 	parser.add_argument('--learning_rate',	type=int,	help='Training learning rate', default=0.0005)
 	parser.add_argument('--weight_decay',		type=int,	help='Training weight decay', default=0.0001)
-	parser.add_argument('--checkpoint', 		type=str,	help='Path of checkpoint to continue training', default=None)
 	parser.add_argument('--epochs', 				type=int, help='Epochs to add to the training of the checkpoint', default=100)
+
+	# MODEL CONFIGURATION
+	parser.add_argument('--relation_layer', type=str, help='Type of relation to use', default='original')
+	parser.add_argument('--checkpoint', 		type=str,	help='Path of checkpoint to continue training', default=None)
 
 	args = argparse_helper(parser, **kwargs)
 
+	args.train_dataset_config = {
+		'video_ids':	 args.video_ids.split(','),
+		'waves_path':	 get_path('waves_path', denoiser='dihard18'),
+		'rttms_path':	 get_path('avd_path', avd_detector='ground_truth') + '/predictions',
+		'labs_path':	 get_path('vad_path', vad_detector='ground_truth') + '/predictions',
+		'frames_path': get_path('asd_path', asd_detector='ground_truth') + '/tracklets'
+	}
+
+	with open(f'dataset/split/val.list', 'r') as file:
+		val_video_ids = file.read().split('\n')
+
+	args.val_dataset_config = {
+		'video_ids':	 val_video_ids,
+		'waves_path':	 get_path('waves_path', denoiser='dihard18'),
+		'rttms_path':	 get_path('avd_path', avd_detector='ground_truth') + '/predictions',
+		'labs_path':	 get_path('vad_path', vad_detector='ground_truth') + '/predictions',
+		'frames_path': get_path('asd_path', asd_detector='ground_truth') + '/tracklets'
+	}
+
 	args.data_type = 'train'
 	args.video_ids = args.video_ids.split(',')
+	args.checkpoint_dir = f'model/third_party/avr_net/checkpoints/{args.relation_layer}'
+	args.train_features_path = f'{args.sys_path}/train_features.pckl'
+	args.val_features_path = f'{args.sys_path}/val_features.pckl'
+	args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+	os.makedirs(args.checkpoint_dir, exist_ok=True)
 
 	# COMENTADO PARA ENTRENAR ATENCIÓN DESDE 0
 	# if args.checkpoint is None:
@@ -264,7 +279,7 @@ def initialize_arguments(**kwargs):
 
 def main(**kwargs):
 	args = initialize_arguments(**kwargs, not_empty=True)
-	mp.spawn(train, args=(args.world_size, args), nprocs=args.world_size, join=True)
+	train(args)
 
 
 if __name__ == '__main__':

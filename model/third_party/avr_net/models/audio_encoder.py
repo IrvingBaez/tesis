@@ -4,14 +4,14 @@ from torch import nn
 
 
 class AudioEncoder(nn.Module):
-	def __init__(self, config):
+	def __init__(self, init_weights):
 		super().__init__()
-		self.inplanes =			config['num_filters'][0]
-		self.encoder_type =	config['encoder_type']
-		self.n_mels =				config['n_mels']
-		self.log_input =		config['log_input']
-		self.fix_layers =		config['fix_layers']
-		self.init_weight =	config['init_weight']
+		self.inplanes			=	32
+		self.n_mels				=	64
+		self.log_input		=	True
+		self.encoder_type	=	'ASP'
+		self.fix_layers		=	'all'
+		self.init_weight	=	init_weights
 
 		self.instancenorm = nn.InstanceNorm1d(self.n_mels)
 		self.torchfb = torch.nn.Sequential(
@@ -26,14 +26,14 @@ class AudioEncoder(nn.Module):
 			)
 		)
 
-		self.conv1 = nn.Conv2d(1, config['num_filters'][0] , kernel_size=3, stride=1, padding=1)
+		self.conv1 = nn.Conv2d(1, 32 , kernel_size=3, stride=1, padding=1)
 		self.relu = nn.ReLU(inplace=True)
-		self.bn1 = nn.BatchNorm2d(config['num_filters'][0])
+		self.bn1 = nn.BatchNorm2d(32)
 
-		self.layer1 = self._make_layer(BasicBlock, config['num_filters'][0], config['layers'][0])
-		self.layer2 = self._make_layer(BasicBlock, config['num_filters'][1], config['layers'][1], stride=(2, 2))
-		self.layer3 = self._make_layer(BasicBlock, config['num_filters'][2], config['layers'][2], stride=(2, 2))
-		self.layer4 = self._make_layer(BasicBlock, config['num_filters'][3], config['layers'][3], stride=(2, 2))
+		self.layer1 = self._make_layer(BasicBlock, 32, 3)
+		self.layer2 = self._make_layer(BasicBlock, 64, 4, stride=(2, 2))
+		self.layer3 = self._make_layer(BasicBlock, 128, 6, stride=(2, 2))
+		self.layer4 = self._make_layer(BasicBlock, 256, 3, stride=(2, 2))
 
 		self.audio_pooling = nn.AdaptiveAvgPool2d((7, 7))
 		self._init_parameters()
@@ -78,8 +78,7 @@ class AudioEncoder(nn.Module):
 				p.requires_grad = False
 
 
-	def forward(self, batch):
-		x = batch['audio']
+	def forward(self, x):
 		N, D, L = x.shape
 		x = x.reshape(N*D, L)
 

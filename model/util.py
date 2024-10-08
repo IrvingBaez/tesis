@@ -1,4 +1,6 @@
 import os
+import torch
+
 
 components = {
 	'data_type':			['test', 'val', 'train', 'demo'],
@@ -81,3 +83,10 @@ def argparse_helper(parser, **kwargs):
 	args = parser.parse_args(args=args_list)
 
 	return args
+
+
+def save_data(data, path):
+	if os.path.exists(path):
+		print(f"File {path} already exists. Skipping save to avoid overwrite.")
+	else:
+		torch.save(data, path)

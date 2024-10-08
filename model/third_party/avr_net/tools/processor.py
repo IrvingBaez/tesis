@@ -81,7 +81,7 @@ class AudioNormalize:
 		return item
 
 
-class AudioTransform:
+class AudioToTensor:
 	def __init__(self, config:dict=None):
 		return
 

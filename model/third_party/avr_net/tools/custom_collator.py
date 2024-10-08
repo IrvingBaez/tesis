@@ -1,11 +1,12 @@
 import torch
+import torch.nn.functional as F
 
-
-class PredictCollator:
+class CustomCollator:
 	def __call__(self, batch):
 		flat_batch = flatten_list(batch)
+		new_batch = add_fields(flat_batch)
 
-		return add_fields(flat_batch)
+		return new_batch
 
 
 def flatten_list(nested_list):
@@ -23,13 +24,18 @@ def flatten_list(nested_list):
 def add_fields(data_list):
 	result = {}
 	fields = data_list[0].keys()
+	chunk_size = len(data_list)
 
 	for field in fields:
+		if field == 'frames':
+			result['frames'] = merge_frames(data_list)
+			continue
+
 		if isinstance(data_list[0][field], torch.Tensor):
-			size = (len(data_list), *data_list[0][field].size())
+			size = (chunk_size, *data_list[0][field].size())
 			result[field] = data_list[0][field].new_empty(size)
 		else:
-			result[field] = [None for _ in range(len(data_list))]
+			result[field] = [None for _ in range(chunk_size)]
 
 		for index, sample in enumerate(data_list):
 			result[field][index] = sample[field]
@@ -37,8 +43,23 @@ def add_fields(data_list):
 		if isinstance(data_list[0][field], dict):
 			result[field] = load_dict(result[field])
 
-	result['frames'] = result['frames'].reshape((len(data_list), 1, 3, 1, 112, 112))
-	result['audio'] = result['audio'].reshape((len(data_list), 1, 32000))
+	# For feature extraction:
+	if result['audio'].numel() == chunk_size * 1 * 32000:
+		result['audio'] = result['audio'].reshape((chunk_size, 1, 32000))
+
+	if 'task_full' in result.keys():
+		result['task_full'] = torch.tensor(result['task_full']).t()
+
+	return result
+
+
+def merge_frames(data_list):
+	result = []
+
+	for datum in data_list:
+		channels, frames, height, width = datum['frames'].shape
+		result.append(datum['frames'].reshape(1, frames, channels, 1, height, width))
+
 	return result
 
 
