@@ -20,7 +20,8 @@ def train_avd_predictor(args):
 			'rttms_path': 	args.rttms_path,
 			'sys_path': 		args.sys_path,
 			'epochs':				args.epochs,
-			'checkpoint':		args.checkpoint
+			'checkpoint':		args.checkpoint,
+			'disable_pb':		args.disable_pb
 		}
 		train_avr_net(**arguments)
 
@@ -71,6 +72,7 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--aligned', 			action='store_true', 							help='Used aligned frame crops')
 	parser.add_argument('--epochs', 			type=int, default=100,						help='Epochs to add to the training of the checkpoint')
 	parser.add_argument('--checkpoint', 	type=str, default=None,						help='Path of checkpoint to continue training')
+	parser.add_argument('--disable_pb', 	action='store_true', 							help='If true, hides progress bars')
 
 	args = util.argparse_helper(parser, **kwargs)
 

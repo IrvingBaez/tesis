@@ -8,10 +8,13 @@ import math
 
 
 class ClusteringDataset(Dataset):
-	def __init__(self, features_path):
+	def __init__(self, features_path, device, disable_pb=False):
 		super().__init__()
 
 		self.features = torch.load(features_path)
+		self.device = device
+		self.disable_pb = disable_pb
+
 		self.items = []
 		self.utterance_counts = OrderedDict()
 		self.start = {}
@@ -20,7 +23,7 @@ class ClusteringDataset(Dataset):
 		self.features_by_video = {}
 
 		self.video_ids = sorted(list(set(self.features['video'])))
-		for video_id in tqdm(self.video_ids, desc='Loading clusterind dataset', leave=False):
+		for video_id in tqdm(self.video_ids, desc='Loading clusterind dataset', leave=False, disable=self.disable_pb):
 			utterances = self._features_by_video(video_id)
 
 			self.utterance_counts[video_id] = len(utterances)
@@ -108,12 +111,12 @@ class ClusteringDataset(Dataset):
 
 		item = {
 			'video_id': video_id,
-			'index_a': torch.LongTensor([i]),
-			'index_b': torch.LongTensor([j]),
-			'video': video_features,
-			'audio': audio_features,
+			'index_a': torch.LongTensor([i]).to(self.device),
+			'index_b': torch.LongTensor([j]).to(self.device),
+			'video': video_features.to(self.device),
+			'audio': audio_features.to(self.device),
 			'task_full': [task_1, task_2],
-			'target': torch.LongTensor([utterances[i]['target'] == utterances[j]['target']])
+			'target': torch.FloatTensor([utterances[i]['target'] == utterances[j]['target']]).to(self.device)
 		}
 
 		return item
@@ -126,7 +129,7 @@ class ClusteringDataset(Dataset):
 		filtered = {
 			'feat_video': torch.index_select(self.features['feat_video'], 0, indices),
 			'feat_audio': torch.index_select(self.features['feat_audio'], 0, indices),
-			'targets': 		torch.index_select(self.features['targets'], 		0, indices),
+			'target': 		torch.index_select(self.features['targets'], 		0, indices),
 			'visible': 		[self.features['visible'][index]	for index in indices],
 			'start': 			[self.features['start'][index]		for index in indices],
 			'end': 				[self.features['end'][index]			for index in indices],
@@ -134,13 +137,13 @@ class ClusteringDataset(Dataset):
 
 		video_features = []
 		for feat_video, feat_audio, target, visible, start, end in zip(
-			filtered['feat_video'], filtered['feat_audio'], filtered['targets'], filtered['visible'], filtered['start'], filtered['end']
+			filtered['feat_video'], filtered['feat_audio'], filtered['target'], filtered['visible'], filtered['start'], filtered['end']
 		):
 			video_features.append({
-				'video_features':	feat_video,
-				'audio_features':	feat_audio,
+				'video_features':	feat_video.cpu(),
+				'audio_features':	feat_audio.cpu(),
 				'visible':				visible,
-				'target':					target,
+				'target':					target.cpu(),
 				'start':					start,
 				'end':						end
 			})

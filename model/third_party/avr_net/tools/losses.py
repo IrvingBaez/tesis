@@ -11,19 +11,20 @@ class MSELoss(nn.Module):
 		self.eval_applicable = False
 
 	def forward(self, scores, targets):
-		# Compute the loss for the local mini-batch on each GPU
 		local_loss = self.loss_fn(scores, targets)
 		batch_size = scores.shape[0]
 
-		# Normalize the loss by the batch size on this GPU
-		local_loss = local_loss / batch_size * self.loss_weight
+		# FOR MULTIPLE GPUS:
+		# # Normalize the loss by the batch size on this GPU
+		# local_loss = local_loss / batch_size * self.loss_weight
 
-		# All-reduce to sum up the losses across all GPUs
-		dist.all_reduce(local_loss, op=dist.ReduceOp.SUM)
+		# # All-reduce to sum up the losses across all GPUs
+		# dist.all_reduce(local_loss, op=dist.ReduceOp.SUM)
 
-		# Divide by the number of GPUs to average the loss
-		world_size = dist.get_world_size()  # Get the number of GPUs
-		avg_loss = local_loss / world_size
+		# # Divide by the number of GPUs to average the loss
+		# world_size = dist.get_world_size()  # Get the number of GPUs
+		# avg_loss = local_loss / world_size
 
-		# Return the averaged loss
+		avg_loss = local_loss / batch_size * self.loss_weight
+
 		return avg_loss.view(1)

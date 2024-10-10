@@ -24,9 +24,9 @@ def train(args):
 	os.makedirs(f'{args.sys_path}')
 
 	with torch.no_grad():
-		train_features = extract_features(args, mode='train')
+		train_features = extract_features(args, mode='train', video_proportion=1)
 		save_data(train_features, args.train_features_path)
-		val_features = extract_features(args, mode='vali')
+		val_features = extract_features(args, mode='vali', video_proportion=1)
 		save_data(val_features, args.val_features_path)
 
 	attention_model, relation_model = load_models(args)
@@ -41,32 +41,32 @@ def train(args):
 
 	criterion = MSELoss()
 
+	# TODO:Actually load checkpoint
 	start_epoch, train_losses, val_losses = load_checkpoint()
 	total_epochs = start_epoch + args.epochs
 
-	train_dataloader = load_data(args.train_features_path)
-	val_dataloader = load_data(args.val_features_path)
-
-	for epoch in tqdm(range(start_epoch, total_epochs), initial=start_epoch, total=total_epochs, desc='Training'):
+	for epoch in tqdm(range(start_epoch, total_epochs), initial=start_epoch, total=total_epochs, desc='Training', disable=args.disable_pb):
 		# ======================== Training Phase ========================
 		attention_model.train()
 		relation_model.train()
 		train_loss = 0.0
 
-		for batch in tqdm(train_dataloader, desc='Training', leave=False):
-			audio = attention_model(batch['video'], batch['audio'])
+		train_dataloader = load_data(args)
+		for batch in tqdm(train_dataloader, desc='Training', leave=False, disable=args.disable_pb):
+			audio = attention_model(batch['audio'], batch['video'])
 			scores = relation_model(batch['video'], audio, batch['task_full'])
 
-			loss += criterion(scores, batch['targets'])
+			loss = criterion(scores, batch['target'])
 			train_loss += loss.item()
 
 			attention_optimizer.zero_grad()
 			relation_optimizer.zero_grad()
 
-			train_loss.backward()
+			loss.backward()
 
 			attention_optimizer.step()
 			relation_optimizer.step()
+		del train_dataloader
 
 		train_losses.append(train_loss)
 
@@ -75,12 +75,14 @@ def train(args):
 		relation_model.eval()
 		val_loss = 0.0
 
-		for batch in tqdm(val_dataloader, desc='Validating', leave=False):
-			video, audio = attention_model(batch['video'], batch['audio'])
-			scores = relation_model(video, audio, batch['task_full'])
+		val_dataloader = load_data(args)
+		for batch in tqdm(val_dataloader, desc='Validating', leave=False, disable=args.disable_pb):
+			audio = attention_model(batch['audio'], batch['video'])
+			scores = relation_model(batch['video'], audio, batch['task_full'])
 
-			loss += criterion(scores, batch['targets'])
+			loss = criterion(scores, batch['target'])
 			val_loss += loss.item()
+		del val_dataloader
 
 		val_losses.append(val_loss)
 
@@ -100,11 +102,19 @@ def train(args):
 			'epoch': epoch
 		}, checkpoint_path)
 
-	graph_losses(train_losses, val_losses,f'{args.checkpoint_dir}/attention_{timestamp}_epoch_{epoch:05d}.png')
+	graph_losses(train_losses, val_losses,f'{args.checkpoint_dir}/attention_{timestamp}_epoch_{epoch:05d}.png', args)
 	rmtree(f'{args.sys_path}/features')
 
 
-def graph_losses(train_losses, val_losses, filename):
+def graph_losses(train_losses, val_losses, filename, args):
+	info = {
+		'lr': args.learning_rate,
+		'weight_decay': args.weight_decay,
+		'scheduelers': 'None'
+	}
+
+	info_text = '\n'.join([f'{key}: {value}' for key, value in info.items()])
+
 	plt.figure(figsize=(10, 5))
 	plt.plot(train_losses, label='train losses')
 	plt.plot(val_losses, label='val losses')
@@ -113,11 +123,15 @@ def graph_losses(train_losses, val_losses, filename):
 	plt.title('Training and Validation Losses')
 	plt.legend()
 	plt.grid(True)
+
+	plt.text(0.95, 0.95, info_text, fontsize=10, transform=plt.gca().transAxes, verticalalignment='top', horizontalalignment='right',
+					bbox=dict(boxstyle='round,pad=0.5', edgecolor='black', facecolor='lightgrey', alpha=0.5))
+
 	plt.savefig(filename)
 	plt.close()
 
 
-def extract_features(args, mode):
+def extract_features(args, mode, video_proportion=1):
 	feature_extractor = FeatureExtractor()
 	feature_extractor.to(args.device)
 
@@ -126,9 +140,9 @@ def extract_features(args, mode):
 	else:
 		config = args.val_dataset_config
 
-	dataset = CustomDataset(config, training=True)
+	dataset = CustomDataset(config, training=True, video_proportion=video_proportion, disable_pb=args.disable_pb)
 	dataloader = DataLoader(dataset, batch_size=255, shuffle=False, num_workers=1, pin_memory=True, drop_last=False, collate_fn=CustomCollator())
-	dataloader = tqdm(dataloader, desc='Extracting features')
+	dataloader = tqdm(dataloader, desc='Extracting features', disable=args.disable_pb)
 
 	feature_list = []
 	for batch in dataloader:
@@ -139,8 +153,8 @@ def extract_features(args, mode):
 	return features
 
 
-def load_data(features_path):
-	dataset = ClusteringDataset(features_path)
+def load_data(args):
+	dataset = ClusteringDataset(args.val_features_path, args.device, args.disable_pb)
 	dataloader = DataLoader(dataset, batch_size=1024, shuffle=False, num_workers=0, pin_memory=False, drop_last=False, collate_fn=CustomCollator())
 
 	return dataloader
@@ -230,6 +244,7 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--learning_rate',	type=int,	help='Training learning rate', default=0.0005)
 	parser.add_argument('--weight_decay',		type=int,	help='Training weight decay', default=0.0001)
 	parser.add_argument('--epochs', 				type=int, help='Epochs to add to the training of the checkpoint', default=100)
+	parser.add_argument('--disable_pb', 		action='store_true', help='If true, hides progress bars')
 
 	# MODEL CONFIGURATION
 	parser.add_argument('--relation_layer', type=str, help='Type of relation to use', default='original')

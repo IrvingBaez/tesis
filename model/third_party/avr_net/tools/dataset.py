@@ -2,6 +2,7 @@ from torch.utils.data.dataset import Dataset
 from collections import defaultdict
 from model.third_party.avr_net.tools.processor import *
 import numpy as np
+import random
 import soundfile
 import torch
 import glob
@@ -10,7 +11,7 @@ from tqdm.auto import tqdm
 
 
 class CustomDataset(Dataset):
-	def __init__(self, config, training=True):
+	def __init__(self, config, training=True, video_proportion=1.0, disable_pb=False):
 		super().__init__()
 		self.snippet_length	= 1
 		self._max_frames		= 200
@@ -25,9 +26,14 @@ class CustomDataset(Dataset):
 		self.rttms_path		= config['rttms_path']
 		self.labs_path		= config['labs_path']
 		self.frames_path	= config['frames_path']
+		self.disable_pb		= disable_pb
 
 		self.training = training
 		assert self.training == bool(self.rttms_path), 'Training mode requires rttms_path'
+
+		assert 0.0 < video_proportion <= 1.0, 'Video proportion must be in the interval (0,1]'
+		new_list_size = int(len(self.video_ids) * video_proportion)
+		self.video_ids = random.sample(self.video_ids, new_list_size)
 
 		self.processors = []
 		self.processors.append(FacePad({'length': 1}))
@@ -140,7 +146,7 @@ class CustomDataset(Dataset):
 		mins = self._min_frames / 100.0
 		step = self._step_frame / 100.0
 
-		for video_id in tqdm(sorted(self.video_ids), desc='Loading dataset', leave=False):
+		for video_id in tqdm(sorted(self.video_ids), desc='Loading dataset', leave=False, disable=self.disable_pb):
 			offset = 600.0 + int(video_id[-2:]) * 300.0
 
 			if self.training:

@@ -48,7 +48,10 @@ def add_fields(data_list):
 		result['audio'] = result['audio'].reshape((chunk_size, 1, 32000))
 
 	if 'task_full' in result.keys():
-		result['task_full'] = torch.tensor(result['task_full']).t()
+		result['task_full'] = torch.tensor(result['task_full']).t().to(result['audio'].device)
+
+	if 'target' in result.keys():
+		result['target'] = result['target'].to(result['audio'].device)
 
 	return result
 
