@@ -33,13 +33,13 @@ class FeatureExtractor(nn.Module):
 		batch['audio'] = batch['audio'].to(self._current_device())
 
 		features = {
-			'feat_audio':	self._audio_encoder(batch['audio']),
-			'feat_video':	self._encode_video(batch['frames']),
+			'feat_audio':	self._audio_encoder(batch['audio']).cpu(),
+			'feat_video':	self._encode_video(batch['frames']).cpu(),
 			'video':			batch['meta']['video'],
 			'start':			batch['meta']['start'],
 			'end':				batch['meta']['end'],
 			'trackid':		batch['meta']['trackid'],
-			'visible':		batch['visible'].to(self._current_device()),
+			'visible':		batch['visible'].cpu(),
 			'losses':			{}
 		}
 

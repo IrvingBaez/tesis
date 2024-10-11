@@ -26,8 +26,11 @@ def train(args):
 	with torch.no_grad():
 		train_features = extract_features(args, mode='train', video_proportion=1)
 		save_data(train_features, args.train_features_path)
+		del train_features
+
 		val_features = extract_features(args, mode='vali', video_proportion=1)
 		save_data(val_features, args.val_features_path)
+		del val_features
 
 	attention_model, relation_model = load_models(args)
 	attention_optimizer, relation_optimizer = load_optimizers(attention_model, relation_model, args)
@@ -145,8 +148,10 @@ def extract_features(args, mode, video_proportion=1):
 	dataloader = tqdm(dataloader, desc='Extracting features', disable=args.disable_pb)
 
 	feature_list = []
-	for batch in dataloader:
+	for index, batch in enumerate(dataloader):
 		feature_list.append(feature_extractor(batch))
+		if args.disable_pb:
+			print(f'Extracting {mode} feature {index}/{len(dataloader)}')
 
 	features = merge_features(feature_list)
 
@@ -155,7 +160,7 @@ def extract_features(args, mode, video_proportion=1):
 
 def load_data(args):
 	dataset = ClusteringDataset(args.val_features_path, args.device, args.disable_pb)
-	dataloader = DataLoader(dataset, batch_size=1024, shuffle=False, num_workers=0, pin_memory=False, drop_last=False, collate_fn=CustomCollator())
+	dataloader = DataLoader(dataset, batch_size=128, shuffle=False, num_workers=0, pin_memory=False, drop_last=False, collate_fn=CustomCollator())
 
 	return dataloader
 
@@ -219,7 +224,7 @@ def merge_features(dicts):
 			if isinstance(value, list):
 				features[key].extend(value)
 			elif isinstance(value, torch.Tensor):
-				features[key] = torch.cat((features[key], value))
+				features[key] = torch.cat((features[key].cpu(), value.cpu()))
 			elif isinstance(value, dict):
 				features[key] = merge_features([features[key], value])
 

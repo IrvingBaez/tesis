@@ -25,7 +25,7 @@ if __name__=='__main__':
 	print(f"Available Memory:       {memory.available / GB_FACTOR:.2f} GB")
 	print(f"Free Memory:            {memory.free / GB_FACTOR:.2f} GB")
 
-	print(f'\nCUDA available:         {torch.cuda.is_available()}')
+	print(f'\nCUDA available:       {torch.cuda.is_available()}')
 	print(f'Device count:           {torch.cuda.device_count()}')
 
 	for i in range(torch.cuda.device_count()):
