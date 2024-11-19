@@ -88,6 +88,7 @@ class VideoEncoder(nn.Module):
 
 
 	def forward(self, x):
+		# x shape: (255, 60, 3, 1, 112, 112)
 		N, S, C, D, H, W = x.shape
 
 		x = x.transpose(2, 3).reshape(N*S*D, C, H, W)

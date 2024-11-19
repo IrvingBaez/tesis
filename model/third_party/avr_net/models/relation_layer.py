@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 class RelationLayer(nn.Module):
-	def __init__(self, init_weights):
+	def __init__(self, init_weights=None):
 		super().__init__()
 
 		# TODO: Turn these 3 into parameters
@@ -38,8 +38,9 @@ class RelationLayer(nn.Module):
 
 		# self._init_parameters()
 
-		checkpoint = torch.load(init_weights)
-		self.load_state_dict(checkpoint['model_state_dict'])
+		if init_weights:
+			checkpoint = torch.load(init_weights)
+			self.load_state_dict(checkpoint['model_state_dict'])
 
 
 	def partial_task_token(self, index):
@@ -85,29 +86,10 @@ class RelationLayer(nn.Module):
 		nn.init.constant_(self.task_token.weight, 1)
 
 
-	# TODO: Replace for training
-	# def forward(self, video, audio, visible, targets):
-	# 	audio = self.batch_norm_audio(audio)
-	# 	support, query, token, label = self.divide_set(video, audio, visible, targets)
+	def forward(self, feat, task):
+		# audio = self.batch_norm_audio(audio)
+		# feat = torch.cat((video, audio), dim=2)
 
-	# 	N, Q, S, C, H, W = query.shape
-	# 	x1 = torch.cat((support, query), dim=3).reshape(N*S*Q, 2*C, H, W)
-	# 	x2 = torch.cat((query, support), dim=3).reshape(N*S*Q, 2*C, H, W)
-	# 	x = torch.cat((x1, x2), dim=0)
-	# 	token = token.reshape(2*N*S*Q, 1536, 1, 1)
-	# 	x = x * token
-	# 	x = self.layer1(x)
-	# 	x = self.layer2(x)
-	# 	x = self.fc(x.flatten(1)).reshape(2*N, S, Q)
-
-	# 	return x, label
-
-
-	def forward(self, video, audio, task):
-		audio = self.batch_norm_audio(audio)
-		feat = torch.cat((video, audio), dim=2)
-
-		N = feat.shape[0]
 		x1 = torch.cat([feat[:, 0:1, ...], feat[:, 1:2, ...]], dim=2)
 		x2 = torch.cat([feat[:, 1:2, ...], feat[:, 0:1, ...]], dim=2)
 		x = torch.cat([x1, x2], dim=1)

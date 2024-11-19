@@ -1,19 +1,22 @@
 import torch
 import psutil
+import torch.multiprocessing as mp
 
-from model.avd.align_faces import main as align_faces
-from model.avd.extract_faces import main as extract_faces
-from model.asd.perform_asd import main as perform_asd
+# from model.avd.align_faces import main as align_faces
+# from model.avd.extract_faces import main as extract_faces
+# from model.asd.perform_asd import main as perform_asd
 from model.avd.perform_avd import main as perform_avd
 from model.avd.train_avd_predictor import main as train_avd
-from model.asd.visualize_asd import main as visualize_asd
-from model.denoise.denoise import main as denoise
-from model.tools.der_and_losses import main as validation
-from model.util import get_path
-from model.third_party.pytorch_parallel.example import main as parallel_example
+# from model.asd.visualize_asd import main as visualize_asd
+# from model.denoise.denoise import main as denoise
+# from model.tools.der_and_losses import main as validation
+# from model.util import get_path
+# from model.third_party.pytorch_parallel.example import main as parallel_example
 
 # TODO: Implement this process for unnanotated videos.
 if __name__=='__main__':
+	mp.set_start_method('spawn')
+
 	data_type = 'val'
 
 	print('\n\n0- SANITY CHECK')
@@ -57,15 +60,11 @@ if __name__=='__main__':
 	# 	align_faces(asd_detector=asd_detector)
 
 	print('\n\n6- TRAINING AUDIO VISUAL DIARIZATION')
-	params = {'denoiser': 'dihard18', 'vad_detector': 'ground_truth', 'asd_detector': 'ground_truth', 'avd_detector': 'avr_net', 'aligned': True, 'epochs': 20, 'checkpoint': 'model/third_party/avr_net/weights/best_relation.ckpt', 'disable_pb': False}
+	params = {'denoiser': 'dihard18', 'vad_detector': 'ground_truth', 'asd_detector': 'ground_truth', 'avd_detector': 'avr_net', 'aligned': True, 'epochs': 10, 'checkpoint': '', 'disable_pb': False, 'video_proportion': 0.025}
 
 	train_avd(**params)
-	# parallel_example(checkpoint='model/third_party/pytorch_parallel/checkpoints/checkpoint_epoch_00004.pth')
 
-	# print('\n\n8- VALIDATING AUDIO VISUAL DIARIZATION')
-	# validation()
-
-	print('\n\n9- AUDIO VISUAL DIARIZATION')
+	print('\n\n7- AUDIO VISUAL DIARIZATION')
 	avd_tests = []
 	for vad_detector in ['ground_truth']:#, 'dihard18']:
 		for asd_detector in ['ground_truth']:#, 'light_asd', 'talk_net']:
@@ -77,7 +76,8 @@ if __name__=='__main__':
 						'vad_detector': vad_detector,
 						'asd_detector': asd_detector,
 						'aligned': 			aligned,
-						'avd_detector': 'avr_net'
+						'avd_detector': 'avr_net',
+						'checkpoint':		'model/third_party/avr_net/checkpoints/2024_11_02 15:28:02/2024_11_03_01:45:45_epoch_00020.ckpt'
 					})
 
 	for params in avd_tests:

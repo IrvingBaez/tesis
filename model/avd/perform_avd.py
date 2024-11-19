@@ -15,14 +15,11 @@ def perform_avd(args):
 		'rttms_path': 	args.rttms_path,
 		'frames_path': 	args.frames_path,
 		'tracks_path': 	args.tracks_path,
-		'sys_path': 		args.sys_path
+		'sys_path': 		args.sys_path,
+		'checkpoint':		args.checkpoint
 	}
 
-	if args.avd_detector == 'avr_net':
-		avr_net(**arguments)
-	if args.avd_detector == 'avar_net':
-		raise NotImplementedError("AVAR_NET is not ready")
-		# avar_net(**arguments)
+	avr_net(**arguments)
 
 	score_avd_validation(args)
 
@@ -57,6 +54,7 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--vad_detector', type=str, default="ground_truth", help='Voice activity detector to find off-screen speakers')
 	parser.add_argument('--asd_detector', type=str, default="ground_truth", help='Active speacker detection used for face cropping')
 	parser.add_argument('--avd_detector', type=str, default="avr_net", 			help='Model to use for audio visual diarozation')
+	parser.add_argument('--checkpoint',		type=str, default='', 						help='Checkpoint to evaluate')
 	parser.add_argument('--aligned', 			action='store_true', 							help='Used aligned frame crops')
 
 	args = util.argparse_helper(parser, **kwargs)

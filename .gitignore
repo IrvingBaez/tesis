@@ -16,6 +16,7 @@ model/third_party/pytorch_parallel/data/*
 *.pckl
 *.out
 *.sad
+*.png
 model/tools/*.jpg
 
 # Not part of the project

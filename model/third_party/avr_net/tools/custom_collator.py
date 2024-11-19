@@ -26,11 +26,8 @@ def add_fields(data_list):
 	fields = data_list[0].keys()
 	chunk_size = len(data_list)
 
+	# TODO: Cumulate tensors in CPU, then delete og tensors and move cummulative to GPU (in corresponding device).
 	for field in fields:
-		if field == 'frames':
-			result['frames'] = merge_frames(data_list)
-			continue
-
 		if isinstance(data_list[0][field], torch.Tensor):
 			size = (chunk_size, *data_list[0][field].size())
 			result[field] = data_list[0][field].new_empty(size)
@@ -44,24 +41,16 @@ def add_fields(data_list):
 			result[field] = load_dict(result[field])
 
 	# For feature extraction:
-	if result['audio'].numel() == chunk_size * 1 * 32000:
+	if isinstance(result['audio'], torch.Tensor) and result['audio'].numel() == chunk_size * 1 * 32000:
 		result['audio'] = result['audio'].reshape((chunk_size, 1, 32000))
 
+	if 'frames' in result.keys():
+		batch_size, channels, frames, height, width = result['frames'].shape
+		result['frames'] = result['frames'].reshape((batch_size, frames, channels, 1, height, width))
+
+	# For clustering
 	if 'task_full' in result.keys():
-		result['task_full'] = torch.tensor(result['task_full']).t().to(result['audio'].device)
-
-	if 'target' in result.keys():
-		result['target'] = result['target'].to(result['audio'].device)
-
-	return result
-
-
-def merge_frames(data_list):
-	result = []
-
-	for datum in data_list:
-		channels, frames, height, width = datum['frames'].shape
-		result.append(datum['frames'].reshape(1, frames, channels, 1, height, width))
+		result['task_full'] = torch.tensor(result['task_full'])
 
 	return result
 
@@ -75,5 +64,8 @@ def load_dict(data):
 	for element in data:
 		for key, value in element.items():
 			result[key].append(value)
+
+	result['start'] = torch.tensor(result['start'])
+	result['end'] = torch.tensor(result['end'])
 
 	return result

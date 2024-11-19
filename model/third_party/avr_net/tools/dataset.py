@@ -20,6 +20,7 @@ class CustomDataset(Dataset):
 
 		# TODO: Implement
 		self.missing_rate 	= 0
+		self.max_utterance_frames = 1
 
 		self.video_ids		= config['video_ids']
 		self.waves_path		= config['waves_path']
@@ -106,8 +107,11 @@ class CustomDataset(Dataset):
 
 	def _load_frames(self, frame_paths):
 		frames = []
-		for frame_path in frame_paths:
+		for frame_path in frame_paths[:self.max_utterance_frames]:
 			frames.append(cv2.cvtColor(cv2.imread(frame_path), cv2.COLOR_BGR2RGB))
+
+		for _ in range(len(frame_paths), self.max_utterance_frames):
+			frames.append(np.zeros((224, 224, 3), dtype=np.uint8))
 
 		frames = np.array(frames, dtype=np.uint8)
 

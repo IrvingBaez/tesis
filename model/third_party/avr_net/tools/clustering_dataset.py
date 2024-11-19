@@ -8,11 +8,10 @@ import math
 
 
 class ClusteringDataset(Dataset):
-	def __init__(self, features_path, device, disable_pb=False):
+	def __init__(self, features_path, disable_pb=False):
 		super().__init__()
 
 		self.features = torch.load(features_path)
-		self.device = device
 		self.disable_pb = disable_pb
 
 		self.items = []
@@ -111,12 +110,12 @@ class ClusteringDataset(Dataset):
 
 		item = {
 			'video_id': video_id,
-			'index_a': torch.LongTensor([i]).to(self.device),
-			'index_b': torch.LongTensor([j]).to(self.device),
-			'video': video_features.to(self.device),
-			'audio': audio_features.to(self.device),
+			'index_a': torch.LongTensor([i]),
+			'index_b': torch.LongTensor([j]),
+			'video': video_features,
+			'audio': audio_features,
 			'task_full': [task_1, task_2],
-			'target': torch.FloatTensor([utterances[i]['target'] == utterances[j]['target']]).to(self.device)
+			'target': torch.FloatTensor([utterances[i]['target'] == utterances[j]['target']])
 		}
 
 		return item
@@ -124,7 +123,8 @@ class ClusteringDataset(Dataset):
 
 	def _features_by_video(self, video_id):
 		indices = torch.LongTensor([index for index, value in enumerate(self.features['video']) if value == video_id])
-		indices = indices.to(self.features['feat_video'].device)
+
+		self.features['targets'] = self.features['targets']
 
 		filtered = {
 			'feat_video': torch.index_select(self.features['feat_video'], 0, indices),
@@ -140,7 +140,7 @@ class ClusteringDataset(Dataset):
 			filtered['feat_video'], filtered['feat_audio'], filtered['target'], filtered['visible'], filtered['start'], filtered['end']
 		):
 			video_features.append({
-				'video_features':	feat_video.cpu(),
+				'video_features':	feat_video,
 				'audio_features':	feat_audio.cpu(),
 				'visible':				visible,
 				'target':					target.cpu(),
