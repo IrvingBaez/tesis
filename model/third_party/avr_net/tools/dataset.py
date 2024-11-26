@@ -20,7 +20,7 @@ class CustomDataset(Dataset):
 
 		# TODO: Implement
 		self.missing_rate 	= 0
-		self.max_utterance_frames = 1
+		self.max_utterance_frames = 5
 
 		self.video_ids		= config['video_ids']
 		self.waves_path		= config['waves_path']

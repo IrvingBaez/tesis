@@ -43,7 +43,7 @@ class SelfAttentionClassToken(nn.Module):
 		nn.init.normal_(self.cls_token, std=0.02)
 
 		# Transformer encoder layer
-		encoder_layer = nn.TransformerEncoderLayer(d_model=self.model_dim, nhead=8)
+		encoder_layer = nn.TransformerEncoderLayer(d_model=self.model_dim, nhead=8, batch_first=True)
 		self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=1)
 
 		# Output projection to reshape back to original dimensions
@@ -64,14 +64,8 @@ class SelfAttentionClassToken(nn.Module):
 		# Concatenate class token with the sequence
 		x = torch.cat((cls_tokens, x), dim=1)  # Shape: [B, N+1, d_model]
 
-		# Transformer expects input as [seq_len, batch_size, embedding_dim]
-		x = x.transpose(0, 1)  # Shape: [N+1, B, d_model]
-
 		# Pass through the Transformer encoder
 		x = self.transformer_encoder(x)  # Shape: [N+1, B, d_model]
-
-		# Revert back to [batch_size, seq_len, embedding_dim]
-		x = x.transpose(0, 1)  # Shape: [B, N+1, d_model]
 
 		# Extract the class token output
 		cls_output = x[:, 0, :]  # Shape: [B, d_model]

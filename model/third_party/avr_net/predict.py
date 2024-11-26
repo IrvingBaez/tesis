@@ -25,7 +25,7 @@ def predict(args):
 	similarities = compute_similarity(args)
 
 	save_data(similarities, args.similarities_path)
-	show_similarities('similarities_testing', similarities['similarities'])
+	# show_similarities('similarities_testing', similarities['similarities'])
 
 	write_rttms(similarities_path=args.similarities_path, sys_path=args.sys_path, data_type=args.data_type)
 
@@ -44,7 +44,7 @@ def extract_features(args):
 	}
 
 	dataset = CustomDataset(datset_config, training=True)
-	dataloader = DataLoader(dataset, batch_size=256, shuffle=False, num_workers=0, pin_memory=False, drop_last=False, collate_fn=CustomCollator())
+	dataloader = DataLoader(dataset, batch_size=512, shuffle=False, num_workers=0, pin_memory=False, drop_last=False, collate_fn=CustomCollator())
 	dataloader = tqdm(dataloader, desc='Extracting features')
 
 	feature_list = []
@@ -108,7 +108,7 @@ def compute_similarity(args):
 	model = load_model(args)
 
 	dataset = ClusteringDataset(args.features_path)
-	dataloader = DataLoader(dataset, batch_size=1024, shuffle=False, num_workers=0, pin_memory=False, drop_last=False, collate_fn=CustomCollator())
+	dataloader = DataLoader(dataset, batch_size=8192, shuffle=False, num_workers=0, pin_memory=False, drop_last=False, collate_fn=CustomCollator())
 
 	for video_id in args.video_ids:
 		similarities[video_id] = torch.diag_embed(torch.ones([dataset.count_utterances(video_id)]))
@@ -125,10 +125,11 @@ def compute_similarity(args):
 
 
 def load_model(args):
-	model = Attention_AVRNet()
+	model = Attention_AVRNet(args.self_attention, args.cross_attention)
+	model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
 	model= nn.DataParallel(model)
-
 	model.to(args.device)
+
 	if args.checkpoint and os.path.isfile(args.checkpoint):
 		checkpoint = torch.load(args.checkpoint)
 		model.load_state_dict(checkpoint['model_state_dict'])
@@ -152,8 +153,9 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--sys_path',			type=str,	help='Path to the folder where to save all the system outputs')
 
 	# MODEL CONFIGURATION
-	parser.add_argument('--relation_layer', type=str, help='Type of relation to use', default='original')
-	parser.add_argument('--checkpoint', 		type=str,	help='Path of checkpoint to load and eval', default=None)
+	parser.add_argument('--self_attention', 	type=str, help='Self attention method to marge available frame features', default='')
+	parser.add_argument('--cross_attention', 	type=str, help='Cross attention method to marge frame and audio features', default='')
+	parser.add_argument('--checkpoint', 			type=str,	help='Path of checkpoint to load and eval', default=None)
 
 	args = argparse_helper(parser, **kwargs)
 

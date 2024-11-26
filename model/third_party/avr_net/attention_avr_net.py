@@ -6,14 +6,23 @@ import model.third_party.avr_net.tools.attention as attention
 
 
 class Attention_AVRNet(nn.Module):
-	def __init__(self):
+	def __init__(self, self_attention, cross_attention):
 		super().__init__()
-		self.self_attention 	= attention.SelfAttentionClassToken()
-		self.bna = nn.BatchNorm2d(256)
-		# self.cross_attention 	= attention.Concat()
-		self.cross_attention 	= attention.FusionCrossAttention(dim_a=49, dim_b=49)
-		self.relation_layer		= RelationLayer('model/third_party/avr_net/weights/best_relation.ckpt')
 
+		# Set cross attention
+		if self_attention == 'class_token':
+			self.self_attention 	= attention.SelfAttentionClassToken()
+		else:
+			self.self_attention 	= attention.PickFirst()
+
+		# Set cross attention
+		if cross_attention == 'fusion':
+			self.cross_attention 	= attention.FusionCrossAttention(dim_a=49, dim_b=49)
+		else:
+			self.cross_attention 	= attention.Concat()
+
+		self.relation_layer		= RelationLayer('model/third_party/avr_net/weights/best_relation.ckpt')
+		self.bna = nn.BatchNorm2d(256)
 		self.bna.load_state_dict(self.relation_layer.bna.state_dict())
 
 

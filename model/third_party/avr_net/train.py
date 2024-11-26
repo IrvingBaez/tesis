@@ -1,5 +1,6 @@
 import argparse
 import os
+import csv
 import torch
 import torch.nn as nn
 from shutil import rmtree
@@ -25,6 +26,7 @@ def train(args):
 	os.makedirs(f'{args.sys_path}')
 
 	with torch.no_grad():
+		print('======================== Extracting Features ========================')
 		train_features = extract_features(args, mode='train', video_proportion=args.video_proportion)
 		save_data(train_features, args.train_features_path)
 		del train_features
@@ -32,6 +34,7 @@ def train(args):
 		val_features = extract_features(args, mode='vali', video_proportion=args.video_proportion)
 		save_data(val_features, args.val_features_path)
 		del val_features
+		print('======================== Features Extracted ========================')
 
 	model, optimizer, scheduler = load_model(args)
 	criterion = MSELoss()
@@ -39,15 +42,24 @@ def train(args):
 	start_epoch, train_losses, train_accs, val_losses, val_accs = load_checkpoint(model, optimizer, scheduler, args)
 	total_epochs = start_epoch + args.epochs
 
-	train_loader = load_data(args, mode='train', batch_size=512)
-	val_loader = load_data(args, mode='val', batch_size=2048)
+	train_loader = load_data(args, mode='train', batch_size=2048)
+	val_loader = load_data(args, mode='val', batch_size=4096)
 
 	epoch = start_epoch
-	for epoch in tqdm(range(start_epoch, total_epochs), initial=start_epoch, total=total_epochs, desc='Epochs', disable=args.disable_pb):
+
+	for param in model.module.relation_layer.parameters():
+		param.requires_grad = False
+
+	for epoch in tqdm(range(start_epoch, total_epochs), initial=start_epoch, total=total_epochs, desc='Epochs'):
 		# ======================== Training Phase ========================
 		model.train()
 		train_loss = 0.0
 		train_accuracy = 0.0
+
+		if epoch == args.frozen_epochs:
+			print(f'======================== Unfreezing relation layer parameters at epoch {epoch} ========================')
+			for param in model.module.relation_layer.parameters():
+				param.requires_grad = True
 
 		for batch in tqdm(train_loader, desc='Training phase', leave=False, disable=args.disable_pb):
 			output = model(batch['video'], batch['audio'], batch['task_full'])
@@ -88,7 +100,7 @@ def train(args):
 		val_losses.append(val_loss.detach().item())
 		val_accs.append(val_accuracy.detach().item())
 
-		check_system_usage()
+		# check_system_usage()
 		del output, loss, accuracy, val_accuracy, val_loss
 		# ======================== Saving data ========================
 		timestamp = datetime.now().strftime('%Y_%m_%d_%H:%M:%S')
@@ -106,16 +118,16 @@ def train(args):
 		}, checkpoint_path)
 
 	description = {
-		'Self Attention': 	'TransformerClsToken',
-		'Cross Attention': 	'Fusion',
-		'video_proportion': args.video_proportion,
-		'epochs': 					total_epochs,
+		'Self Attention': 	args.self_attention,
+		'Cross Attention': 	args.cross_attention,
+		'Video Proportion': args.video_proportion,
+		'Epochs': 					total_epochs,
 		'Optimizer':				'SDG',
-		'base LR': 					args.learning_rate,
-		'LR Step size': 		args.step_size,
-		'LR gamma': 				args.gamma,
+		'Base LR': 					args.learning_rate,
+		'LR Step Size': 		args.step_size,
+		'LR Gamma': 				args.gamma,
 		'Momentum':					args.momentum,
-		'weight_decay': 		args.weight_decay,
+		'Weight Decay': 		args.weight_decay,
 	}
 	description = '\n'.join([f'{key}: {value}' for key, value in description.items()])
 
@@ -206,13 +218,12 @@ def load_data(args, mode, batch_size=256):
 
 
 def load_model(args):
-	model = Attention_AVRNet()
-	# model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
+	model = Attention_AVRNet(args.self_attention, args.cross_attention)
+	model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
 	model= nn.DataParallel(model)
 	model.to(args.device)
 
 	optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
-	# optimizer = Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 	scheduler = StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
 
 	return model, optimizer, scheduler
@@ -273,29 +284,37 @@ def plot_acc_and_loss(train_acc, train_loss, val_acc, val_loss, save_path, descr
 	plt.tight_layout(rect=[0.15, 0, 1, 1])
 	plt.savefig(save_path)
 
+	csv_save_path = os.path.splitext(save_path)[0] + '.csv'
+	with open(csv_save_path, 'w', newline='') as csvfile:
+		csvwriter = csv.writer(csvfile)
+		# Write the header
+		csvwriter.writerow(['epoch', 'train_loss', 'val_loss', 'train_acc', 'val_acc'])
+		# Write the data for each epoch
+		num_epochs = len(train_acc)
+		for epoch in range(num_epochs):
+			row = [epoch + 1, train_loss[epoch], val_loss[epoch], train_acc[epoch], val_acc[epoch]]
+			csvwriter.writerow(row)
+
+
 
 def initialize_arguments(**kwargs):
 	parser = argparse.ArgumentParser(description = "Light ASD prediction")
 
 	# DATA CONFIGURATION
-	parser.add_argument('--video_ids',			type=str,	help='Video ids separated by commas')
-	parser.add_argument('--videos_path',		type=str,	help='Path to the videos to work with')
-	parser.add_argument('--waves_path',			type=str,	help='Path to the waves, already denoised')
-	parser.add_argument('--labs_path',			type=str,	help='Path to the lab files with voice activity detection info')
-	parser.add_argument('--frames_path',		type=str,	help='Path to the face frames already cropped and aligned')
-	parser.add_argument('--tracks_path',		type=str,	help='Path to the csv files containing the active speaker detection info')
-	parser.add_argument('--rttms_path', 		type=str,	help='Path to the rttm files containing detection ground truth')
-	parser.add_argument('--sys_path',				type=str,	help='Path to the folder where to save all the system outputs')
+	parser.add_argument('--aligned', 					action='store_true', help='Wether or not to use alined frames')
 
 	# TRAINING CONFIGURATION
 	# parser.add_argument('--gpu_batch_size',	type=int,	help='Training batch size per GPU', default=4)
-	parser.add_argument('--learning_rate',		type=float,	help='Training base learning rate', default=0.001)
+	parser.add_argument('--learning_rate',		type=float,	help='Training base learning rate', default=0.0005)
 	parser.add_argument('--momentum',					type=float,	help='Training momentum for SDG optimizer', default=0.05)
 	parser.add_argument('--weight_decay',			type=float,	help='Training weight decay for SDG optimizer', default=0.0001)
-	parser.add_argument('--step_size',				type=int,	help='Training stepsize for StepLR scheduler', default=5)
+	parser.add_argument('--step_size',				type=int,		help='Training stepsize for StepLR scheduler', default=5)
 	parser.add_argument('--gamma',						type=float,	help='Training gamma for StepLR scheduler', default=0.5)
 	parser.add_argument('--video_proportion', type=float, help='Percentage of videos to use in training and validation')
-	parser.add_argument('--epochs', 					type=int, help='Epochs to add to the training of the checkpoint', default=100)
+	parser.add_argument('--epochs', 					type=int, 	help='Epochs to add to the training of the checkpoint', default=10)
+	parser.add_argument('--frozen_epochs', 		type=int, 	help='Epochs to train without updating relation network weights', default=0)
+	parser.add_argument('--self_attention', 	type=str, 	help='Self attention method to marge available frame features', default='')
+	parser.add_argument('--cross_attention', 	type=str, 	help='Cross attention method to marge frame and audio features', default='')
 	parser.add_argument('--disable_pb', 			action='store_true', help='If true, hides progress bars')
 
 	# MODEL CONFIGURATION
@@ -304,12 +323,15 @@ def initialize_arguments(**kwargs):
 
 	args = argparse_helper(parser, **kwargs)
 
+	with open(f'dataset/split/train.list', 'r') as file:
+		args.video_ids = file.read().split('\n')
+
 	args.train_dataset_config = {
-		'video_ids':	 args.video_ids.split(','),
+		'video_ids':	 args.video_ids,
 		'waves_path':	 get_path('waves_path', denoiser='dihard18'),
 		'rttms_path':	 get_path('avd_path', avd_detector='ground_truth') + '/predictions',
 		'labs_path':	 get_path('vad_path', vad_detector='ground_truth') + '/predictions',
-		'frames_path': get_path('asd_path', asd_detector='ground_truth') + '/tracklets'
+		'frames_path': get_path('asd_path', asd_detector='ground_truth') + ('/align_frames' if args.aligned else '/frames')
 	}
 
 	with open(f'dataset/split/val.list', 'r') as file:
@@ -320,26 +342,17 @@ def initialize_arguments(**kwargs):
 		'waves_path':	 get_path('waves_path', denoiser='dihard18'),
 		'rttms_path':	 get_path('avd_path', avd_detector='ground_truth') + '/predictions',
 		'labs_path':	 get_path('vad_path', vad_detector='ground_truth') + '/predictions',
-		'frames_path': get_path('asd_path', asd_detector='ground_truth') + '/tracklets'
+		'frames_path': get_path('asd_path', asd_detector='ground_truth') + ('/align_frames' if args.aligned else '/frames')
 	}
 
-	args.data_type = 'train'
-	args.video_ids = args.video_ids.split(',')
-	args.checkpoint_dir = f'model/third_party/avr_net/checkpoints/{datetime.now().strftime("%Y_%m_%d %H:%M:%S")}'
-	args.train_features_path = f'{args.sys_path}/train_features.pckl'
-	args.val_features_path = f'{args.sys_path}/val_features.pckl'
+	args.sys_path 						= get_path('avd_path', 	avd_detector= 'avr_net')
+	args.data_type 						= 'train'
+	args.checkpoint_dir 			= f'model/third_party/avr_net/checkpoints/{datetime.now().strftime("%Y_%m_%d %H:%M:%S")}'
+	args.train_features_path 	= f'{args.sys_path}/train_features.pckl'
+	args.val_features_path 		= f'{args.sys_path}/val_features.pckl'
 	args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 	os.makedirs(args.checkpoint_dir, exist_ok=True)
-
-	# COMENTADO PARA ENTRENAR ATENCIÓN DESDE 0
-	# if args.checkpoint is None:
-	# 	args.checkpoint = CONFIG['checkpoint']
-
-	if torch.cuda.is_available():
-		args.world_size = torch.cuda.device_count()
-	else:
-		args.world_size = 1
 
 	return args
 

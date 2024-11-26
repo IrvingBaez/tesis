@@ -6,7 +6,7 @@ import torch.multiprocessing as mp
 # from model.avd.extract_faces import main as extract_faces
 # from model.asd.perform_asd import main as perform_asd
 from model.avd.perform_avd import main as perform_avd
-from model.avd.train_avd_predictor import main as train_avd
+from model.third_party.avr_net.train import main as train_avd
 # from model.asd.visualize_asd import main as visualize_asd
 # from model.denoise.denoise import main as denoise
 # from model.tools.der_and_losses import main as validation
@@ -60,8 +60,25 @@ if __name__=='__main__':
 	# 	align_faces(asd_detector=asd_detector)
 
 	print('\n\n6- TRAINING AUDIO VISUAL DIARIZATION')
-	params = {'denoiser': 'dihard18', 'vad_detector': 'ground_truth', 'asd_detector': 'ground_truth', 'avd_detector': 'avr_net', 'aligned': True, 'epochs': 10, 'checkpoint': '', 'disable_pb': False, 'video_proportion': 0.025}
-
+	params = {
+		# Data config
+		'checkpoint': '',
+		'disable_pb': True,
+		# Architecture
+		'self_attention': 'class_token',
+		'cross_attention': '',
+		# Hyperparams
+		'learning_rate': 0.0005,
+		'momentum': 0.05,
+		'weight_decay': 0.0001,
+		'step_size': 2,
+		'gamma': 0.5,
+		'epochs': 10,
+		'frozen_epochs': 5,
+		'video_proportion': 0.1,
+		# 'frames': 5
+		'aligned': False,
+	}
 	train_avd(**params)
 
 	print('\n\n7- AUDIO VISUAL DIARIZATION')
@@ -69,7 +86,7 @@ if __name__=='__main__':
 	for vad_detector in ['ground_truth']:#, 'dihard18']:
 		for asd_detector in ['ground_truth']:#, 'light_asd', 'talk_net']:
 			for denoiser in ['dihard18']:#, 'noisereduce', 'original']:
-				for aligned in [False]: # False]:
+				for aligned in [True]: # False]:
 					avd_tests.append({
 						'data_type': 		data_type,
 						'denoiser': 		denoiser,
@@ -77,7 +94,9 @@ if __name__=='__main__':
 						'asd_detector': asd_detector,
 						'aligned': 			aligned,
 						'avd_detector': 'avr_net',
-						'checkpoint':		'model/third_party/avr_net/checkpoints/2024_11_02 15:28:02/2024_11_03_01:45:45_epoch_00020.ckpt'
+						'checkpoint':		'model/third_party/avr_net/checkpoints/2024_11_24 15:11:30/2024_11_25_04:21:40_epoch_00029.ckpt',
+						'self_attention': 'class_token',
+						'cross_attention': 'fusion'
 					})
 
 	for params in avd_tests:

@@ -7,16 +7,18 @@ from model.third_party.avr_net.predict import main as avr_net
 
 def perform_avd(args):
 	arguments = {
-		'data_type':		args.data_type,
-		'video_ids':		','.join(args.video_ids),
-		'videos_path':	args.videos_path,
-		'waves_path': 	args.waves_path,
-		'labs_path': 		args.labs_path,
-		'rttms_path': 	args.rttms_path,
-		'frames_path': 	args.frames_path,
-		'tracks_path': 	args.tracks_path,
-		'sys_path': 		args.sys_path,
-		'checkpoint':		args.checkpoint
+		'data_type':				args.data_type,
+		'video_ids':				','.join(args.video_ids),
+		'videos_path':			args.videos_path,
+		'waves_path': 			args.waves_path,
+		'labs_path': 				args.labs_path,
+		'rttms_path': 			args.rttms_path,
+		'frames_path': 			args.frames_path,
+		'tracks_path': 			args.tracks_path,
+		'sys_path': 				args.sys_path,
+		'checkpoint':				args.checkpoint,
+		'self_attention': 	args.self_attention,
+		'cross_attention': 	args.cross_attention
 	}
 
 	avr_net(**arguments)
@@ -49,13 +51,15 @@ def score_avd_validation(args):
 def initialize_arguments(**kwargs):
 	parser = argparse.ArgumentParser(description = "Arguments for data preprocessing")
 
-	parser.add_argument('--data_type',		type=str, default="val", 					help='Data type to process')
-	parser.add_argument('--denoiser', 		type=str, default="dihard18", 		help='Model used to denoise video sound')
-	parser.add_argument('--vad_detector', type=str, default="ground_truth", help='Voice activity detector to find off-screen speakers')
-	parser.add_argument('--asd_detector', type=str, default="ground_truth", help='Active speacker detection used for face cropping')
-	parser.add_argument('--avd_detector', type=str, default="avr_net", 			help='Model to use for audio visual diarozation')
-	parser.add_argument('--checkpoint',		type=str, default='', 						help='Checkpoint to evaluate')
-	parser.add_argument('--aligned', 			action='store_true', 							help='Used aligned frame crops')
+	parser.add_argument('--data_type',				type=str, default="val", 					help='Data type to process')
+	parser.add_argument('--denoiser', 				type=str, default="dihard18", 		help='Model used to denoise video sound')
+	parser.add_argument('--vad_detector', 		type=str, default="ground_truth", help='Voice activity detector to find off-screen speakers')
+	parser.add_argument('--asd_detector', 		type=str, default="ground_truth", help='Active speacker detection used for face cropping')
+	parser.add_argument('--avd_detector', 		type=str, default="avr_net", 			help='Model to use for audio visual diarozation')
+	parser.add_argument('--checkpoint',				type=str, default='', 						help='Checkpoint to evaluate')
+	parser.add_argument('--aligned', 					action='store_true', 							help='Used aligned frame crops')
+	parser.add_argument('--self_attention', 	type=str, default='',							help='Self attention method to marge available frame features')
+	parser.add_argument('--cross_attention', 	type=str, default='',							help='Cross attention method to marge frame and audio features')
 
 	args = util.argparse_helper(parser, **kwargs)
 
