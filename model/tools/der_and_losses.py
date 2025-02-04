@@ -31,7 +31,7 @@ def prediction_args(aligned:bool=True):
 		'waves_path': 'dataset/waves/dihard18',
 		'labs_path': 'dataset/vad/ground_truth/predictions',
 		'frames_path': 'dataset/asd/ground_truth/aligned_tracklets',
-		'sys_path': 'dataset/avd/avr_net',
+		'sys_path': 'model/third_party/avr_net/features',
 		'data_type': 'val',
 		'weights_path': None
 	}

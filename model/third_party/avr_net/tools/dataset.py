@@ -11,16 +11,16 @@ from tqdm.auto import tqdm
 
 
 class CustomDataset(Dataset):
-	def __init__(self, config, training=True, video_proportion=1.0, disable_pb=False):
+	def __init__(self, config, training=True, video_proportion=1.0, disable_pb=False, video_ids=None):
 		super().__init__()
 		self.snippet_length	= 1
 		self._max_frames		= 200
 		self._min_frames		= 20
 		self._step_frame		= 50
 
-		# TODO: Implement
+		# TODO: Implement missing_rate
 		self.missing_rate 	= 0
-		self.max_utterance_frames = 5
+		self.max_utterance_frames = config['max_frames'] if 'max_frames' in config else 5
 
 		self.video_ids		= config['video_ids']
 		self.waves_path		= config['waves_path']
@@ -34,7 +34,12 @@ class CustomDataset(Dataset):
 
 		assert 0.0 < video_proportion <= 1.0, 'Video proportion must be in the interval (0,1]'
 		new_list_size = int(len(self.video_ids) * video_proportion)
-		self.video_ids = random.sample(self.video_ids, new_list_size)
+
+		if video_ids:
+			self.video_ids = video_ids
+		elif video_proportion < 1.0:
+			random.seed('CleoStoat')
+			self.video_ids = random.sample(self.video_ids, new_list_size)
 
 		self.processors = []
 		self.processors.append(FacePad({'length': 1}))
@@ -73,7 +78,7 @@ class CustomDataset(Dataset):
 		sample = {
 			'frames':		frames,
 			'audio':		self._load_audio(item),
-			'visible':	torch.tensor([len(frames) > 0]),
+			'visible':	torch.tensor([len(item['image_paths']) > 0]),
 			'meta':			{}
 		}
 

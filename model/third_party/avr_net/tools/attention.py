@@ -31,19 +31,18 @@ import torch
 import torch.nn as nn
 
 class SelfAttentionClassToken(nn.Module):
-	def __init__(self):
+	def __init__(self, dropout=0.1):
 		super(SelfAttentionClassToken, self).__init__()
 		input_dim = 512 * 7 * 7  # Input embedding dimension
 		self.input_dim = input_dim
 		self.model_dim = 512  # Transformer embedding dimension
 		self.projection = nn.Linear(input_dim, self.model_dim)
 
-		# Initialize the class token
-		self.cls_token = nn.Parameter(torch.zeros(1, 1, self.model_dim))
-		nn.init.normal_(self.cls_token, std=0.02)
+		# self.cls_token = nn.Parameter(torch.zeros(1, 1, self.model_dim))
+		# nn.init.normal_(self.cls_token, std=0.02)
 
 		# Transformer encoder layer
-		encoder_layer = nn.TransformerEncoderLayer(d_model=self.model_dim, nhead=8, batch_first=True)
+		encoder_layer = nn.TransformerEncoderLayer(d_model=self.model_dim, nhead=12, batch_first=True, dropout=dropout)
 		self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=1)
 
 		# Output projection to reshape back to original dimensions
@@ -59,7 +58,7 @@ class SelfAttentionClassToken(nn.Module):
 		x = self.projection(x)         # Shape: [B, N, d_model]
 
 		# Prepare class token
-		cls_tokens = self.cls_token.expand(B, -1, -1)  # Shape: [B, 1, d_model]
+		cls_tokens = torch.zeros(B, 1, self.model_dim, device=x.device) # Shape: [B, 1, d_model]
 
 		# Concatenate class token with the sequence
 		x = torch.cat((cls_tokens, x), dim=1)  # Shape: [B, N+1, d_model]
@@ -128,7 +127,6 @@ class FusionCrossAttention(nn.Module):
 		dB = KB.shape[-1]
 
 		# Cross Attention: softmax( QA * KᵀA / sqrt(dA) ) * VA
-		# RuntimeError: Expected size for first two dimensions of batch2 tensor to be: [512, 256] but got: [512, 512].
 		attn_a = torch.matmul(QB, KA.transpose(-2, -1)) / torch.sqrt(torch.tensor(dA, dtype=torch.float32))
 		attn_a = F.softmax(attn_a, dim=-1)
 		fused_a = torch.matmul(attn_a, VA)

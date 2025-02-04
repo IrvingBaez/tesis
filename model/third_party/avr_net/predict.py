@@ -1,6 +1,6 @@
 import torch, argparse, os
 import torch.nn as nn
-from shutil import rmtree
+# from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 
@@ -15,16 +15,14 @@ from model.util import argparse_helper, save_data, check_system_usage, show_simi
 
 
 def predict(args):
-	if os.path.exists(args.sys_path):
-		rmtree(args.sys_path)
+	os.makedirs(f'{args.sys_path}', exist_ok=True)
 
-	os.makedirs(f'{args.sys_path}')
+	if not os.path.exists(args.features_path):
+		features = extract_features(args)
+		save_data(features, args.features_path, verbose=True)
 
-	features = extract_features(args)
-	save_data(features, args.features_path)
 	similarities = compute_similarity(args)
-
-	save_data(similarities, args.similarities_path)
+	save_data(similarities, args.similarities_path, verbose=True)
 	# show_similarities('similarities_testing', similarities['similarities'])
 
 	write_rttms(similarities_path=args.similarities_path, sys_path=args.sys_path, data_type=args.data_type)
@@ -107,6 +105,7 @@ def compute_similarity(args):
 	similarities = {}
 	model = load_model(args)
 
+	print(f'Loading features from path {args.features_path}')
 	dataset = ClusteringDataset(args.features_path)
 	dataloader = DataLoader(dataset, batch_size=8192, shuffle=False, num_workers=0, pin_memory=False, drop_last=False, collate_fn=CustomCollator())
 
@@ -140,7 +139,7 @@ def load_model(args):
 
 
 def initialize_arguments(**kwargs):
-	parser = argparse.ArgumentParser(description = "Light ASD prediction")
+	parser = argparse.ArgumentParser(description = "AVR_Net prediction")
 
 	parser.add_argument('--data_type',		type=str,	help='Type of data being processed, test, val or train')
 	parser.add_argument('--video_ids',		type=str,	help='Video ids separated by commas')
@@ -162,7 +161,7 @@ def initialize_arguments(**kwargs):
 	args.video_ids = args.video_ids.split(',')
 	args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 	args.similarities_path = f'{args.sys_path}/similarity_matrix.pckl'
-	args.features_path = f'{args.sys_path}/features.pckl'
+	args.features_path = f'{args.sys_path}/predict_features.pckl'
 
 	# if not args.checkpoint:
 	# 	args.checkpoint = 'model/third_party/avr_net/weights/best_relation.ckpt'

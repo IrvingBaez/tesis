@@ -1,34 +1,52 @@
 import torch
 import psutil
 import torch.multiprocessing as mp
+import subprocess
+
 
 # from model.avd.align_faces import main as align_faces
 # from model.avd.extract_faces import main as extract_faces
 # from model.asd.perform_asd import main as perform_asd
 from model.avd.perform_avd import main as perform_avd
 from model.third_party.avr_net.train import main as train_avd
+from model.third_party.avr_net.train_lightning import main as train_lightning_avd
+from model.third_party.avr_net.train_features_extraction import main as train_features_extraction
 # from model.asd.visualize_asd import main as visualize_asd
 # from model.denoise.denoise import main as denoise
 # from model.tools.der_and_losses import main as validation
 # from model.util import get_path
-# from model.third_party.pytorch_parallel.example import main as parallel_example
 
-# TODO: Implement this process for unnanotated videos.
+
 if __name__=='__main__':
-	mp.set_start_method('spawn')
+	# mp.set_start_method('spawn', force=True)
 
 	data_type = 'val'
+
+	# result = subprocess.run(
+	# 	['nvidia-smi', '--query-gpu=driver_version', '--format=csv,noheader'],
+	# 	capture_output=True,
+	# 	text=True
+	# )
+	# driver_version = result.stdout.strip()
+
+	# result = subprocess.run(["nvcc", "--version"], capture_output=True, text=True)
+	# nvcc_version = result.stdout.strip()
+
 
 	print('\n\n0- SANITY CHECK')
 	GB_FACTOR = 1024**3
 
 	memory = psutil.virtual_memory()
-	print(f"Total Memory:           {memory.total / GB_FACTOR:.2f} GB")
-	print(f"Used Memory:            {memory.used / GB_FACTOR:.2f} GB")
-	print(f"Available Memory:       {memory.available / GB_FACTOR:.2f} GB")
-	print(f"Free Memory:            {memory.free / GB_FACTOR:.2f} GB")
+	print(f'Total Memory:           {memory.total / GB_FACTOR:.2f} GB')
+	print(f'Used Memory:            {memory.used / GB_FACTOR:.2f} GB')
+	print(f'Available Memory:       {memory.available / GB_FACTOR:.2f} GB')
+	print(f'Free Memory:            {memory.free / GB_FACTOR:.2f} GB')
 
 	print(f'\nCUDA available:       {torch.cuda.is_available()}')
+	# print(f'\nCUDA version:      		{torch.version.cuda}')
+	# print(f'\ntorch version:       	{torch.__version__}')
+	# print(f'NVIDIA driver version:  {driver_version}')
+	# print(f'NVCC version:						{nvcc_version}')
 	print(f'Device count:           {torch.cuda.device_count()}')
 
 	for i in range(torch.cuda.device_count()):
@@ -55,53 +73,67 @@ if __name__=='__main__':
 	# for asd_detector in ['ground_truth', 'talk_net', 'light_asd']:
 	# 	extract_faces(data_type=data_type, asd_detector=asd_detector)
 
+
 	print('\n\n5- FACE ALIGN')
 	# for asd_detector in ['ground_truth']:#, 'light_asd', 'talk_net']:
 	# 	align_faces(asd_detector=asd_detector)
 
+
+	print('\n\n6- Data Base Exploration')
+	# train_features_extraction(disable_pb=True, aligned=False)
+
+
+	# Probar desempeño original
+	# Probar con frames iguales
+	# Probar saltando frames
 	print('\n\n6- TRAINING AUDIO VISUAL DIARIZATION')
-	params = {
+	train_params = {
 		# Data config
-		'checkpoint': '',
-		'disable_pb': True,
+		'video_proportion': 			0.3,
+		'val_video_proportion':		0.1,
+		'aligned': 								False,
+		'checkpoint': 						'',
+		'max_frames': 						5,
+		'disable_pb': 						False,
 		# Architecture
-		'self_attention': 'class_token',
-		'cross_attention': '',
+		'self_attention': 				'class_token', # 'class_token' or 'pick_first',
+		'self_attention_dropout': 0.2,
+		'cross_attention':	 			'concat', # 'fusion' or 'concat'
 		# Hyperparams
-		'learning_rate': 0.0005,
-		'momentum': 0.05,
-		'weight_decay': 0.0001,
-		'step_size': 2,
-		'gamma': 0.5,
-		'epochs': 10,
-		'frozen_epochs': 5,
-		'video_proportion': 0.1,
-		# 'frames': 5
-		'aligned': False,
+		'learning_rate': 					0.005,
+		'momentum': 							0.05,
+		'weight_decay': 					0.001,
+		'step_size': 							5,
+		'gamma': 									0.5,
+		'epochs': 								30,
+		'frozen_epochs': 					5,
 	}
-	train_avd(**params)
+
+	print('Starting training with params: ', train_params)
+	checkpoint = train_avd(**train_params)
+	# train_lightning_avd(**train_params)
 
 	print('\n\n7- AUDIO VISUAL DIARIZATION')
 	avd_tests = []
 	for vad_detector in ['ground_truth']:#, 'dihard18']:
 		for asd_detector in ['ground_truth']:#, 'light_asd', 'talk_net']:
 			for denoiser in ['dihard18']:#, 'noisereduce', 'original']:
-				for aligned in [True]: # False]:
+				for aligned in [False]: # True]:
 					avd_tests.append({
-						'data_type': 		data_type,
-						'denoiser': 		denoiser,
-						'vad_detector': vad_detector,
-						'asd_detector': asd_detector,
-						'aligned': 			aligned,
-						'avd_detector': 'avr_net',
-						'checkpoint':		'model/third_party/avr_net/checkpoints/2024_11_24 15:11:30/2024_11_25_04:21:40_epoch_00029.ckpt',
-						'self_attention': 'class_token',
-						'cross_attention': 'fusion'
+						'data_type': 				data_type,
+						'denoiser': 				denoiser,
+						'vad_detector': 		vad_detector,
+						'asd_detector': 		asd_detector,
+						'aligned': 					aligned,
+						'avd_detector': 		'avr_net',
+						'checkpoint':				checkpoint,
+						'self_attention': 	train_params['self_attention'],
+						'cross_attention': 	train_params['cross_attention']
 					})
 
 	for params in avd_tests:
 		print(params)
-		# perform_avd(**params)
+		perform_avd(**params)
 		print('')
 
 

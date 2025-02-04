@@ -6,12 +6,12 @@ import model.third_party.avr_net.tools.attention as attention
 
 
 class Attention_AVRNet(nn.Module):
-	def __init__(self, self_attention, cross_attention):
+	def __init__(self, self_attention, cross_attention, dropout=0.1):
 		super().__init__()
 
 		# Set cross attention
 		if self_attention == 'class_token':
-			self.self_attention 	= attention.SelfAttentionClassToken()
+			self.self_attention 	= attention.SelfAttentionClassToken(dropout=dropout)
 		else:
 			self.self_attention 	= attention.PickFirst()
 

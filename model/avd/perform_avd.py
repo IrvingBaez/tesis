@@ -2,6 +2,7 @@ import argparse, os
 import model.util as util
 from datetime import datetime
 from model.avd.score_avd import main as score_avd
+from pathlib import Path
 
 from model.third_party.avr_net.predict import main as avr_net
 
@@ -33,11 +34,8 @@ def score_avd_validation(args):
 	with open(score_path, 'r') as file:
 		scores = file.read()
 
-	save_dir = 'model/third_party/avr_net/results'
-	os.makedirs(save_dir, exist_ok=True)
-
 	timestamp = datetime.now().strftime('%Y_%b_%d_%H:%M:%S')
-	with open(f'{save_dir}/{timestamp}.out', 'w') as file:
+	with open(f'{args.save_dir}/{timestamp}.out', 'w') as file:
 		file.write(f'data_type:    {args.data_type}\n')
 		file.write(f'denoiser:     {args.denoiser}\n')
 		file.write(f'vad_detector: {args.vad_detector}\n')
@@ -74,6 +72,11 @@ def initialize_arguments(**kwargs):
 	asd_path 					= util.get_path('asd_path', asd_detector=args.asd_detector)
 	args.frames_path 	= f'{asd_path}/aligned_tracklets' if args.aligned else f'{asd_path}/tracklets'
 	args.tracks_path 	= f'{asd_path}/predictions'
+
+	args.save_dir = args.checkpoint.rsplit('/', 1)[0]
+
+	assert Path(args.waves_path).exists()
+	assert Path(args.frames_path).exists()
 
 	args.sys_path = util.get_path('avd_path', avd_detector= args.avd_detector)
 

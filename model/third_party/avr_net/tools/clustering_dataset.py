@@ -22,7 +22,7 @@ class ClusteringDataset(Dataset):
 		self.features_by_video = {}
 
 		self.video_ids = sorted(list(set(self.features['video'])))
-		for video_id in tqdm(self.video_ids, desc='Loading clusterind dataset', leave=False, disable=self.disable_pb):
+		for video_id in tqdm(self.video_ids, desc='Loading clustering dataset', leave=False, disable=self.disable_pb):
 			utterances = self._features_by_video(video_id)
 
 			self.utterance_counts[video_id] = len(utterances)

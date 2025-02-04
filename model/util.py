@@ -87,14 +87,17 @@ def argparse_helper(parser, **kwargs):
 	return args
 
 
-def save_data(data, path):
-	if os.path.exists(path):
+def save_data(data, path, override=False, verbose=False):
+	if os.path.exists(path) and not override:
 		print(f"File {path} already exists. Skipping save to avoid overwrite.")
 	else:
 		torch.save(data, path)
+		if verbose:
+			print(f"File data saved on {path}.")
+			print(file_size(path))
 
 
-def check_system_usage():
+def check_system_usage(gpu=True):
 	print('\n\n================ CURRENT SYSYEM USAGE ================')
 	GB_FACTOR = 1024**3
 	system_total = 0.0
@@ -107,29 +110,30 @@ def check_system_usage():
 	print(f'Reserved Memory: {memory.used / GB_FACTOR:.2f} GB')
 	print(f'Available Memory: {memory.available / GB_FACTOR:.2f} GB')
 
-	info_lines = []
-	for i in range(torch.cuda.device_count()):
-		total_memory = torch.cuda.get_device_properties(i).total_memory / GB_FACTOR
-		reserved_memory = torch.cuda.memory_reserved(i) / GB_FACTOR
-		available_memory = total_memory - reserved_memory
+	if gpu:
+		info_lines = []
+		for i in range(torch.cuda.device_count()):
+			total_memory = torch.cuda.get_device_properties(i).total_memory / GB_FACTOR
+			reserved_memory = torch.cuda.memory_reserved(i) / GB_FACTOR
+			available_memory = total_memory - reserved_memory
 
-		system_total += total_memory
-		system_reserved += reserved_memory
-		system_available += available_memory
+			system_total += total_memory
+			system_reserved += reserved_memory
+			system_available += available_memory
 
-		info_lines.append(f'\n  GPU {i}:')
-		info_lines.append(f'    Device name:      {torch.cuda.get_device_name(i)}')
-		info_lines.append(f'    Total Memory: {total_memory:.2f} GB')
-		info_lines.append(f'    Reserved Memory: {reserved_memory:.2f} GB')
-		info_lines.append(f'    Available Memory: {available_memory:.2f} GB')
+			info_lines.append(f'\n  GPU {i}:')
+			info_lines.append(f'    Device name:      {torch.cuda.get_device_name(i)}')
+			info_lines.append(f'    Total Memory: {total_memory:.2f} GB')
+			info_lines.append(f'    Reserved Memory: {reserved_memory:.2f} GB')
+			info_lines.append(f'    Available Memory: {available_memory:.2f} GB')
 
-	print(f'\nSystem VRAM Info:')
-	print(f'Total Memory: {system_total:.2f} GB')
-	print(f'Reserved Memory: {system_reserved:.2f} GB')
-	print(f'Available Memory: {system_available:.2f} GB')
+		print(f'\nSystem VRAM Info:')
+		print(f'Total Memory: {system_total:.2f} GB')
+		print(f'Reserved Memory: {system_reserved:.2f} GB')
+		print(f'Available Memory: {system_available:.2f} GB')
 
-	for line in info_lines:
-		print(line)
+		for line in info_lines:
+			print(line)
 
 
 def show_similarities(folder, similarities):
@@ -139,3 +143,25 @@ def show_similarities(folder, similarities):
 		tensor_img = (value * 255).byte()
 		image = Image.fromarray(tensor_img.numpy(), mode='L')
 		image.save(f"{folder}/{key}.png")
+
+
+def file_size(path):
+    size_bytes = os.path.getsize(path)
+
+    if size_bytes >= 1024**3:
+        size = size_bytes / (1024**3)
+        unit = 'GB'
+    elif size_bytes >= 1024**2:
+        size = size_bytes / (1024**2)
+        unit = 'MB'
+    elif size_bytes >= 1024:
+        size = size_bytes / 1024
+        unit = 'KB'
+    else:
+        size = size_bytes
+        unit = 'B'
+
+    if unit == 'B':
+        return f"{int(size)} {unit}"
+    else:
+        return f"{size:.2f} {unit}"

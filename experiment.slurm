@@ -1,12 +1,13 @@
 #!/bin/bash
 #
-#SBATCH --job-name=avr_net_experiments #job name
-#SBATCH --nodes=1 #number of nodes requested
-#SBATCH --gpus=4 #number of gpus requested
-#SBATCH --partition=gpu #queue
-#SBATCH --exclude=c18
-#SBATCH --mail-user="irvingbaezc@gmail.com" #email for reporting
-#SBATCH --mail-type=ALL #report types
+#SBATCH --job-name=avr_net_experiments 			# Job name
+#SBATCH --nodes=1 													# Number of nodes requested
+#SBATCH --mem=50G														# RAM requested
+#SBATCH --gpus=4 														# Number of gpus requested
+#SBATCH --partition=gpu 										# Queue
+#SBATCH --exclude=c04,c18,c19								# Avoid these nodes
+#SBATCH --mail-user="irvingbaezc@gmail.com"	# Email for reporting
+#SBATCH --mail-type=ALL 										# Report types
 
 set -eu
 
@@ -24,5 +25,8 @@ export TF_CPP_MIN_LOG_LEVEL=2
 export NO_ALBUMENTATIONS_UPDATE=1
 export PYTHONPATH=$PWD
 export CUDA_VISIBLE_DEVICES=0,1,2,3
+
+# Clean up .pyc and __pycache__ before running
+# find . -name "*.pyc" -o -name "__pycache__" | xargs rm -rf
 
 python3 model/experiments.py

@@ -1,4 +1,4 @@
-import argparse, os, torch
+import argparse, os
 from shutil import rmtree
 from glob import glob
 from tqdm import tqdm
