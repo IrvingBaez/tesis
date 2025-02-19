@@ -89,29 +89,29 @@ if __name__=='__main__':
 	print('\n\n6- TRAINING AUDIO VISUAL DIARIZATION')
 	train_params = {
 		# Data config
-		'video_proportion': 			0.3,
+		'video_proportion': 			0.1,
 		'val_video_proportion':		0.1,
 		'aligned': 								False,
 		'checkpoint': 						'',
-		'max_frames': 						5,
+		'max_frames': 						1,
 		'disable_pb': 						False,
 		# Architecture
-		'self_attention': 				'class_token', # 'class_token' or 'pick_first',
+		'self_attention': 				'pick_first', # 'class_token' or 'pick_first',
 		'self_attention_dropout': 0.2,
 		'cross_attention':	 			'concat', # 'fusion' or 'concat'
 		# Hyperparams
-		'learning_rate': 					0.005,
-		'momentum': 							0.05,
-		'weight_decay': 					0.001,
+		'learning_rate': 					0.001,
+		'momentum': 							0.005,
+		'weight_decay': 					0.0001,
 		'step_size': 							5,
 		'gamma': 									0.5,
-		'epochs': 								30,
-		'frozen_epochs': 					5,
+		'epochs': 								5,
+		'frozen_epochs': 					0,
 	}
 
 	print('Starting training with params: ', train_params)
-	checkpoint = train_avd(**train_params)
-	# train_lightning_avd(**train_params)
+	# checkpoint = train_avd(**train_params)
+	train_lightning_avd(**train_params)
 
 	print('\n\n7- AUDIO VISUAL DIARIZATION')
 	avd_tests = []

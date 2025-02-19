@@ -4,14 +4,15 @@ import torch
 import torch.nn as nn
 from datetime import datetime
 from torch.optim.lr_scheduler import StepLR
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, SequentialSampler
 from tqdm.auto import tqdm
 import matplotlib.pyplot as plt
 from pathlib import Path
-
+import torch.nn.functional as F
 
 from model.third_party.avr_net.attention_avr_net import Attention_AVRNet
 from model.util import argparse_helper, save_data, get_path
+from .feature_extraction import main as extract_features
 from .tools.clustering_dataset import ClusteringDataset
 from .tools.train_dataset import TrainDataset
 from .tools.custom_collator import CustomCollator
@@ -33,12 +34,9 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 
 	def configure_optimizers(self):
-		optimizer = torch.optim.SGD(self.parameters(), lr=self.args.learning_rate, momentum=self.args.momentum, weight_decay=self.args.weight_decay)
+		# optimizer = torch.optim.SGD(self.parameters(), lr=self.args.learning_rate, momentum=self.args.momentum, weight_decay=self.args.weight_decay)
+		optimizer = torch.optim.Adam(self.parameters(), lr=self.args.learning_rate)
 		return optimizer
-
-
-	def forward(self, video, audio, task):
-		self.model(video, audio, task)
 
 
 	# TODO: Freeze parameters
@@ -46,9 +44,14 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		video, audio, task_full, target = batch['video'], batch['audio'], batch['task_full'], batch['target']
 		output = self.model(video, audio, task_full)
 
-		loss = self.criterion(output, target)
+		loss = F.mse_loss(output, target)
+		# loss = self.criterion(output, target)
 		accuracy = ((output > 0.5) == target).float().mean()
-		self.log_dict({"train_loss": loss, "train_acc": accuracy})
+
+		self.log("loss/train", loss, sync_dist=True, on_step=True)
+		self.log("acc/train", accuracy, sync_dist=True, on_step=True)
+
+		# self.logger.experiment.add_scalars("losses", {"train_loss": loss})
 
 		return loss
 
@@ -57,9 +60,17 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		video, audio, task_full, target = batch['video'], batch['audio'], batch['task_full'], batch['target']
 		output = self.model(video, audio, task_full)
 
-		loss = self.criterion(output, target)
+		loss = F.mse_loss(output, target)
+		# loss = self.criterion(output, target)
 		accuracy = ((output > 0.5) == target).float().mean()
-		self.log_dict({"val_loss": loss, "val_acc": accuracy})
+
+		self.log("loss/val", loss, sync_dist=True)
+		self.log("acc/val", accuracy, sync_dist=True)
+
+		# self.logger.experiment.add_scalars("losses", {"val_loss": loss})
+
+		return loss
+
 
 
 def train(args):
@@ -67,119 +78,50 @@ def train(args):
 	train_loader, val_loader = create_dataset(args)
 
 	trainer = pl.Trainer(
-		accelerator="gpu", devices=4, strategy="ddp",
+		accelerator="gpu", devices=1, strategy="ddp_find_unused_parameters_true", # strategy="ddp",
 		default_root_dir=args.checkpoint_dir,
 		callbacks=[
-			EarlyStopping(monitor="val_loss", mode="min"),
+			EarlyStopping(monitor="loss/val", mode="min"),
 			ModelSummary(max_depth=2)
 		],
-		profiler="simple"
 	)
 
 	trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 
 
 def create_dataset(args):
-	os.makedirs(f'{args.sys_path}', exist_ok=True)
+	args.train_features_path, args.val_features_path = extract_features(
+		sys_path=args.sys_path,
+		aligned=args.aligned,
+		max_frames=args.max_frames,
+		disable_pb=args.disable_pb
+	)
 
-	with torch.no_grad():
-		print('======================== Extracting Features ========================')
-		if not os.path.exists(args.train_features_path):
-			train_features = extract_features(args, mode='train', video_proportion=args.video_proportion)
-			save_data(train_features, args.train_features_path)
-			del train_features
-
-		if not os.path.exists(args.val_features_path):
-			val_features = extract_features(args, mode='vali', video_proportion=0.1)
-			save_data(val_features, args.val_features_path)
-			del val_features
-		print('======================== Features Extracted ========================')
-
-	train_loader = load_data(args, mode='train', batch_size=2048)
-	val_loader = load_data(args, mode='val', batch_size=4096)
+	train_loader = load_data(args, mode='train', workers=0, cache_size=25, batch_size=128)
+	val_loader = load_data(args, mode='val', workers=0, cache_size=25, batch_size=2048)
 
 	return train_loader, val_loader
 
 
-def extract_features(args, mode, video_proportion=1.0):
-	feature_extractor = FeatureExtractor()
-	feature_extractor = nn.DataParallel(feature_extractor)
-	feature_extractor.to(args.device)
-
-	if mode == 'train':
-		config = args.train_dataset_config
-	else:
-		config = args.val_dataset_config
-
-	dataset = CustomDataset(config, training=True, video_proportion=video_proportion, disable_pb=args.disable_pb)
-	dataloader = DataLoader(dataset, batch_size=128, shuffle=False, num_workers=0, pin_memory=True, drop_last=False, collate_fn=CustomCollator())
-	dataloader = tqdm(dataloader, desc='Extracting features', disable=args.disable_pb)
-	print(len(dataset))
-
-	feature_list = []
-	with torch.no_grad():
-		for batch in dataloader:
-			features = {}
-
-			feat_audio, feat_video = feature_extractor(batch['audio'], batch['frames'])
-
-			features['feat_audio'] 	= feat_audio
-			features['feat_video'] 	= feat_video
-			features['video'] 			=	list(batch['meta']['video']),
-			features['start'] 			=	batch['meta']['start'],
-			features['end'] 				=	batch['meta']['end'],
-			features['trackid'] 		=	batch['meta']['trackid'],
-			features['visible'] 		=	batch['visible'],
-			features['losses'] 			=	{}
-
-			if 'targets' in batch.keys():
-				features['targets'] = batch['targets']
-
-			for key, value in features.items():
-				if isinstance(value, torch.Tensor):
-					features[key] = value.cpu()
-
-			feature_list.append(features)
-
-	features = merge_features(feature_list)
-
-	return features
-
-
-def merge_features(dicts):
-	features = dicts[0]
-
-	for key, value in features.items():
-		if isinstance(value, tuple):
-			features[key] = value[0]
-
-	for batch in dicts[1:]:
-		for key, value in batch.items():
-			if isinstance(value, tuple):
-				value = value[0]
-
-			if isinstance(value, list):
-				features[key].extend(value)
-			elif isinstance(value, torch.Tensor):
-				features[key] = torch.cat((features[key], value))
-			elif isinstance(value, dict):
-				features[key] = merge_features([features[key], value])
-
-	for key, value in features.items():
-		if isinstance(value, torch.Tensor):
-			features[key] = value.cpu()
-
-	return features
-
-
-def load_data(args, mode, batch_size=256):
+def load_data(args, mode, workers, cache_size=1, batch_size=256):
 	if mode=='train':
-		dataset = ClusteringDataset(args.train_features_path, args.disable_pb)
+		dataset = ClusteringDataset(args.train_features_path, args.disable_pb, video_proportion=args.video_proportion, cache_size=cache_size)
 
 	if mode=='val':
-		dataset = ClusteringDataset(args.val_features_path, args.disable_pb)
+		dataset = ClusteringDataset(args.val_features_path, args.disable_pb, video_proportion=args.val_video_proportion, cache_size=cache_size)
 
-	dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False, drop_last=False, collate_fn=CustomCollator())
+	sampler = SequentialSampler(dataset)
+
+	dataloader = DataLoader(
+		dataset,
+		batch_size=batch_size,
+		shuffle=False,
+		num_workers=workers,
+		sampler=sampler,
+		pin_memory=True,
+		drop_last=False,
+		collate_fn=CustomCollator()
+	)
 
 	return dataloader
 
@@ -189,6 +131,7 @@ def load_model(args):
 	model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
 	model= nn.DataParallel(model)
 	model.to(args.device)
+	model.train()
 
 	optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
 	scheduler = StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)

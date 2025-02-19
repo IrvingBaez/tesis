@@ -1,6 +1,8 @@
 import torch
 import torch.nn.functional as F
 
+
+# TODO: Split into feature collator and clustering collator
 class CustomCollator:
 	def __call__(self, batch):
 		flat_batch = flatten_list(batch)

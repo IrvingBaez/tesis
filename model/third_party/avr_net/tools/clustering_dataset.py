@@ -5,30 +5,39 @@ from tqdm.auto import tqdm
 from collections import OrderedDict
 from bisect import bisect_right
 import math
+from glob import glob
+import random
+import os
 
 
 class ClusteringDataset(Dataset):
-	def __init__(self, features_path, disable_pb=False):
+	def __init__(self, features_path, disable_pb=False, video_proportion=1.0, cache_size=1):
 		super().__init__()
 
-		self.features = torch.load(features_path)
+		self.features_path = features_path
+		self.video_ids = sorted([os.path.basename(filepath).split('.')[0] for filepath in glob(f'{self.features_path}/*.*')])
+
+		assert 0.0 < video_proportion <= 1.0, 'Video proportion must be in the interval (0,1]'
+
+		if video_proportion < 1.0:
+			random.seed('CleoStoat')
+			new_list_size = int(len(self.video_ids) * video_proportion)
+			self.video_ids = random.sample(self.video_ids, new_list_size)
+
 		self.disable_pb = disable_pb
 
-		self.items = []
 		self.utterance_counts = OrderedDict()
-		self.start = {}
-		self.end = {}
 		self._video_ranges = [0]
-		self.features_by_video = {}
 
-		self.video_ids = sorted(list(set(self.features['video'])))
-		for video_id in tqdm(self.video_ids, desc='Loading clustering dataset', leave=False, disable=self.disable_pb):
-			utterances = self._features_by_video(video_id)
+		self.cache_size = cache_size
+		self.cache = OrderedDict()
+		self.cache_hits = 0.0
+		self.cache_misses = 0.0
+
+		for video_id in tqdm(self.video_ids, desc='Indexing clustering dataset', disable=self.disable_pb):
+			utterances = self._dict_features_to_items(video_id)
 
 			self.utterance_counts[video_id] = len(utterances)
-			self.start[video_id]	= np.array([utterance['start'] for utterance in utterances])
-			self.end[video_id] 		= np.array([utterance['end'] for utterance in utterances])
-			self.features_by_video[video_id] = self._features_by_video(video_id)
 			self._video_ranges.append(self._video_ranges[-1] + self._pairs_in_video(video_id))
 
 		self._video_ranges.pop()
@@ -62,6 +71,7 @@ class ClusteringDataset(Dataset):
 			item = self._retrive_item(video_id, i, j)
 		except Exception as e:
 			print(repr(e))
+			print(self.video_ids)
 			print(f'{index:03d} => Vid {list(self.utterance_counts.keys()).index(video_id)}: {video_id} fn({video_size},{inner_index}) = ({i:03d}, {j:03d})')
 			print('error')
 
@@ -77,14 +87,9 @@ class ClusteringDataset(Dataset):
 
 
 	def _pairs_in_video(self, video_id):
-		n = self.count_utterances(video_id)
+		n = self.utterance_counts[video_id]
 
 		return ((n - 1) * n) // 2
-
-
-
-	def count_utterances(self, video_id):
-		return self.utterance_counts[video_id]
 
 
 	def starts(self):
@@ -95,9 +100,26 @@ class ClusteringDataset(Dataset):
 		return self.ends
 
 
+	def _hit_cache(self, video_id):
+		if video_id not in self.cache.keys():
+			self.cache_misses += 1.0
+
+			# Make space for new data if necesary
+			if len(self.cache) >= self.cache_size:
+				self.cache.popitem(last=False)
+
+			# Load new data
+			self.cache[video_id] = self._dict_features_to_items(video_id)
+		else:
+			self.cache_hits += 1.0
+
+		# print(f'Hit/miss ratio = {(self.cache_hits/self.cache_misses):.2f} for cache of size {len(self.cache)} and {len(self.video_ids)} videos')
+
+		return self.cache[video_id]
+
+
 	def _retrive_item(self, video_id, i, j):
-		utterances = self.features_by_video[video_id]
-		self.utterance_counts[video_id] = len(utterances)
+		utterances = self._hit_cache(video_id)
 
 		video_features = torch.cat((utterances[i]['video_features'], utterances[j]['video_features']))
 		audio_features = torch.cat((utterances[i]['audio_features'], utterances[j]['audio_features']))
@@ -121,18 +143,16 @@ class ClusteringDataset(Dataset):
 		return item
 
 
-	def _features_by_video(self, video_id):
-		indices = torch.LongTensor([index for index, value in enumerate(self.features['video']) if value == video_id])
-
-		self.features['targets'] = self.features['targets']
+	def _dict_features_to_items(self, video_id):
+		features = torch.load(f'{self.features_path}/{video_id}.pckl')
 
 		filtered = {
-			'feat_video': torch.index_select(self.features['feat_video'], 0, indices),
-			'feat_audio': torch.index_select(self.features['feat_audio'], 0, indices),
-			'target': 		torch.index_select(self.features['targets'], 		0, indices),
-			'visible': 		[self.features['visible'][index]	for index in indices],
-			'start': 			[self.features['start'][index]		for index in indices],
-			'end': 				[self.features['end'][index]			for index in indices],
+			'feat_video': features['feat_video'],
+			'feat_audio': features['feat_audio'],
+			'target': 		features['targets'],
+			'visible': 		features['visible'],
+			'start': 			features['start'],
+			'end': 				features['end']
 		}
 
 		video_features = []
@@ -141,9 +161,9 @@ class ClusteringDataset(Dataset):
 		):
 			video_features.append({
 				'video_features':	feat_video,
-				'audio_features':	feat_audio.cpu(),
+				'audio_features':	feat_audio,
 				'visible':				visible,
-				'target':					target.cpu(),
+				'target':					target,
 				'start':					start,
 				'end':						end
 			})

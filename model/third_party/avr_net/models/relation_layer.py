@@ -7,10 +7,10 @@ class RelationLayer(nn.Module):
 	def __init__(self, init_weights=None):
 		super().__init__()
 
-		# TODO: Turn these 3 into parameters
-		self.num_way			= 20
-		self.dropout			= 0
-		self.num_shot			= 1
+		# # FOR OLD TRAINING METHOD
+		# self.dropout			= 0
+		# self.num_way			= 20
+		# self.num_shot			= 1
 
 		self.layers				= [8, 6]
 		self.num_filters	= [256, 64]
@@ -36,7 +36,7 @@ class RelationLayer(nn.Module):
 
 		self.task_token = nn.Embedding(4, 1536)
 
-		# self._init_parameters()
+		self._init_parameters()
 
 		if init_weights:
 			checkpoint = torch.load(init_weights)
@@ -87,6 +87,7 @@ class RelationLayer(nn.Module):
 
 
 	def forward(self, feat, task):
+		# # DONE IN Attention_AVRNet
 		# audio = self.batch_norm_audio(audio)
 		# feat = torch.cat((video, audio), dim=2)
 
@@ -95,56 +96,58 @@ class RelationLayer(nn.Module):
 		x = torch.cat([x1, x2], dim=1)
 		token = torch.cat((self.task_token(task[0]).unsqueeze(1), self.task_token(task[1]).unsqueeze(1)), dim=1)
 
-		N, S, C, H, W = x.shape
-		x = x.reshape(N*S, C, H, W)
-		token = token.reshape(N*S, 1536, 1, 1)
+		B, N, C, H, W = x.shape
+		x = x.reshape(B*N, C, H, W)
+		token = token.reshape(B*N, 1536, 1, 1)
 		x = x * token
 		x = self.layer1(x)
 		x = self.layer2(x)
 		x = self.fc(x.flatten(1))
-		x = x.reshape(N, -1, 1).mean(1)
+		x = x.reshape(B, -1, 1).mean(1)
 
 		return x
 
 
-	def batch_norm_audio(self, audio):
-		N, D, C, H, W = audio.shape
-		audio = self.bna(audio.reshape(N*D, C, H, W))
-		audio = audio.reshape(N, D, C, H, W)
+	# # DONE IN Attention_AVRNet
+	# def batch_norm_audio(self, audio):
+	# 	N, D, C, H, W = audio.shape
+	# 	audio = self.bna(audio.reshape(N*D, C, H, W))
+	# 	audio = audio.reshape(N, D, C, H, W)
 
-		return audio
+	# 	return audio
 
 
-	def divide_set(self, video, audio, visible, targets):
-		feat = torch.cat((video, audio), dim=2)
-		N, _, C, H, W = feat.shape
+	# # USED FOR OLD TRAINIG METHOD
+	# def divide_set(self, video, audio, visible, targets):
+	# 	feat = torch.cat((video, audio), dim=2)
+	# 	N, _, C, H, W = feat.shape
 
-		feat = feat.reshape(N, self.num_way, self.num_shot, C, H, W)
-		targets = targets.reshape(N, self.num_way, self.num_shot)
-		visible = visible.reshape(N, self.num_way, self.num_shot)
+	# 	feat = feat.reshape(N, self.num_way, self.num_shot, C, H, W)
+	# 	targets = targets.reshape(N, self.num_way, self.num_shot)
+	# 	visible = visible.reshape(N, self.num_way, self.num_shot)
 
-		support = feat[:, :, 1:, ...].reshape(N, -1, C, H, W)
-		support_t = targets[:, :, 1:].reshape(N, -1)
-		support_v = visible[:, :, 1:].reshape(N, -1)
-		num_support = support.shape[1]
+	# 	support = feat[:, :, 1:, ...].reshape(N, -1, C, H, W)
+	# 	support_t = targets[:, :, 1:].reshape(N, -1)
+	# 	support_v = visible[:, :, 1:].reshape(N, -1)
+	# 	num_support = support.shape[1]
 
-		query = feat[:, :, 0, ...]
-		query_t = targets[:, :, 0]
-		query_v = visible[:, :, 0]
-		num_query = query.shape[1]
+	# 	query = feat[:, :, 0, ...]
+	# 	query_t = targets[:, :, 0]
+	# 	query_v = visible[:, :, 0]
+	# 	num_query = query.shape[1]
 
-		support = support.unsqueeze(1).expand(-1, num_query, -1, -1, -1, -1)
-		query = query.unsqueeze(2).expand(-1, -1, num_support, -1, -1, -1)
+	# 	support = support.unsqueeze(1).expand(-1, num_query, -1, -1, -1, -1)
+	# 	query = query.unsqueeze(2).expand(-1, -1, num_support, -1, -1, -1)
 
-		support_t = support_t.unsqueeze(1).expand(-1, num_query, -1)
-		query_t = query_t.unsqueeze(2).expand(-1, -1, num_support)
-		label = torch.eq(support_t, query_t).float().repeat(2, 1, 1)
+	# 	support_t = support_t.unsqueeze(1).expand(-1, num_query, -1)
+	# 	query_t = query_t.unsqueeze(2).expand(-1, -1, num_support)
+	# 	label = torch.eq(support_t, query_t).float().repeat(2, 1, 1)
 
-		support_v = support_v.unsqueeze(1).expand(-1, num_query, -1)
-		query_v = query_v.unsqueeze(2).expand(-1, -1, num_support)
-		token = torch.cat((self.task_token(2*support_v + query_v), self.task_token(2*query_v + support_v)), dim=0)
+	# 	support_v = support_v.unsqueeze(1).expand(-1, num_query, -1)
+	# 	query_v = query_v.unsqueeze(2).expand(-1, -1, num_support)
+	# 	token = torch.cat((self.task_token(2*support_v + query_v), self.task_token(2*query_v + support_v)), dim=0)
 
-		return support, query, token, label
+	# 	return support, query, token, label
 
 
 class Bottleneck(nn.Module):

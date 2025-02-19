@@ -9,7 +9,7 @@ dataset/face_clips/
 # Downloadable model
 *.pth
 *.ckpt
-model/third_party/pytorch_parallel/data/*
+model/third_party/avr_net/checkpoints/
 
 # Program output
 *.csv

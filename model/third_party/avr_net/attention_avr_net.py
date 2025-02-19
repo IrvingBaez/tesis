@@ -28,10 +28,10 @@ class Attention_AVRNet(nn.Module):
 
 	def forward(self, video, audio, task):
 		# Batch Norm Audio
-		N, D, C, H, W = audio.shape
+		B, N, C, H, W = audio.shape
 
-		audio = self.bna(audio.reshape(N*D, C, H, W))
-		audio = audio.reshape(N, D, C, H, W)
+		audio = self.bna(audio.reshape(B*N, C, H, W))
+		audio = audio.reshape(B, N, C, H, W)
 
 		# Shaping audio
 		audio_a = audio[:, :1, ...]

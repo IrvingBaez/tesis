@@ -2,7 +2,6 @@ from torch.utils.data.dataset import Dataset
 from collections import defaultdict
 from model.third_party.avr_net.tools.processor import *
 import numpy as np
-import random
 import soundfile
 import torch
 import glob
@@ -11,12 +10,11 @@ from tqdm.auto import tqdm
 
 
 class CustomDataset(Dataset):
-	def __init__(self, config, training=True, video_proportion=1.0, disable_pb=False, video_ids=None):
+	def __init__(self, config, training=True, disable_pb=False, video_ids=None):
 		super().__init__()
-		self.snippet_length	= 1
 		self._max_frames		= 200
 		self._min_frames		= 20
-		self._step_frame		= 50
+		self._step_frame		= 100
 
 		# TODO: Implement missing_rate
 		self.missing_rate 	= 0
@@ -32,14 +30,7 @@ class CustomDataset(Dataset):
 		self.training = training
 		assert self.training == bool(self.rttms_path), 'Training mode requires rttms_path'
 
-		assert 0.0 < video_proportion <= 1.0, 'Video proportion must be in the interval (0,1]'
-		new_list_size = int(len(self.video_ids) * video_proportion)
 
-		if video_ids:
-			self.video_ids = video_ids
-		elif video_proportion < 1.0:
-			random.seed('CleoStoat')
-			self.video_ids = random.sample(self.video_ids, new_list_size)
 
 		self.processors = []
 		self.processors.append(FacePad({'length': 1}))
