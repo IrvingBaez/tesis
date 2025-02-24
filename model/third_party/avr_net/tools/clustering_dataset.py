@@ -131,9 +131,9 @@ class ClusteringDataset(Dataset):
 		task_2 = 2 * visible_b + visible_a
 
 		item = {
-			'video_id': video_id,
-			'index_a': torch.LongTensor([i]),
-			'index_b': torch.LongTensor([j]),
+			# 'video_id': video_id,
+			# 'index_a': torch.LongTensor([i]),
+			# 'index_b': torch.LongTensor([j]),
 			'video': video_features,
 			'audio': audio_features,
 			'task_full': [task_1, task_2],
@@ -164,8 +164,8 @@ class ClusteringDataset(Dataset):
 				'audio_features':	feat_audio,
 				'visible':				visible,
 				'target':					target,
-				'start':					start,
-				'end':						end
+				# 'start':					start,
+				# 'end':						end
 			})
 
 		return video_features

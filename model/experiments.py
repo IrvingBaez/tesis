@@ -83,14 +83,16 @@ if __name__=='__main__':
 	# train_features_extraction(disable_pb=True, aligned=False)
 
 
-	# Probar desempeño original
-	# Probar con frames iguales
-	# Probar saltando frames
+	# Self attention:
+	# 	Funciones de pérdida dejar SGD.
+	#		Probar Learning rate más bajo.
+	# 	Usar promedio aritmético, pooling layer, convolution y self-attention.
+	# 	Graficar promedio de entrenamiento y validación en una sola gráfica.
 	print('\n\n6- TRAINING AUDIO VISUAL DIARIZATION')
 	train_params = {
 		# Data config
-		'video_proportion': 			0.1,
-		'val_video_proportion':		0.1,
+		'video_proportion': 			1.0,
+		'val_video_proportion':		1.0,
 		'aligned': 								False,
 		'checkpoint': 						'',
 		'max_frames': 						1,
@@ -100,12 +102,14 @@ if __name__=='__main__':
 		'self_attention_dropout': 0.2,
 		'cross_attention':	 			'concat', # 'fusion' or 'concat'
 		# Hyperparams
+		'loss_fn':								'bce', # 'bce' 'mse'
+		'optmizer':								'sgd', # 'sgd' 'adam'
 		'learning_rate': 					0.001,
 		'momentum': 							0.005,
 		'weight_decay': 					0.0001,
 		'step_size': 							5,
 		'gamma': 									0.5,
-		'epochs': 								5,
+		'epochs': 								15,
 		'frozen_epochs': 					0,
 	}
 

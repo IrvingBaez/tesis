@@ -7,6 +7,7 @@ import torch
 import glob
 import cv2
 from tqdm.auto import tqdm
+from util import save_data
 
 
 class CustomDataset(Dataset):
@@ -30,8 +31,6 @@ class CustomDataset(Dataset):
 		self.training = training
 		assert self.training == bool(self.rttms_path), 'Training mode requires rttms_path'
 
-
-
 		self.processors = []
 		self.processors.append(FacePad({'length': 1}))
 		self.processors.append(FaceToTensor())
@@ -42,8 +41,10 @@ class CustomDataset(Dataset):
 
 		self.items = []
 		self.entity_to_index = []
+		self.image_counts = []
 
 		self._load_dataset()
+		save_data(self.image_counts, f'db_image_counts_{self.video_ids[0]}.pckl')
 
 
 	def __len__(self):
@@ -181,6 +182,7 @@ class CustomDataset(Dataset):
 								'video_id':			video_id,
 								'entity_id':		entity_ids[index] if self.training else None
 							})
+						self.image_counts.append(len(image_paths))
 					else:
 						# offscreen speaker
 						self.items.append({
@@ -192,6 +194,7 @@ class CustomDataset(Dataset):
 							'video_id':			video_id,
 							'entity_id':		entity_ids[index] if self.training else None
 						})
+						self.image_counts.append(0)
 
 		if self.training:
 			self.entity_to_index = sorted(list(set(self.entity_to_index)))

@@ -6,22 +6,19 @@ from datetime import datetime
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader, SequentialSampler
 from tqdm.auto import tqdm
-import matplotlib.pyplot as plt
 from pathlib import Path
 import torch.nn.functional as F
 
 from model.third_party.avr_net.attention_avr_net import Attention_AVRNet
-from model.util import argparse_helper, save_data, get_path
+from model.util import argparse_helper, get_path
 from .feature_extraction import main as extract_features
 from .tools.clustering_dataset import ClusteringDataset
-from .tools.train_dataset import TrainDataset
 from .tools.custom_collator import CustomCollator
-from .tools.dataset import CustomDataset
-from .tools.feature_extractor import FeatureExtractor
 
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks import ModelSummary
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+
 
 class Lightning_Attention_AVRNet(pl.LightningModule):
 	def __init__(self, args):
@@ -29,13 +26,24 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		self.args = args
 		self.save_hyperparameters()
 
+		if args.loss_fn == 'bce':
+			self.loss_fn = F.binary_cross_entropy
+		elif args.loss_fn == 'mse':
+			self.loss_fn = F.mse_loss
+		else:
+			raise ValueError(f"loss_fn must be 'bce' or 'mse' not '{args.loss_fn}'")
+
 		self.model = Attention_AVRNet(self.args.self_attention, self.args.cross_attention, dropout=self.args.self_attention_dropout)
-		self.criterion = nn.BCELoss()
 
 
 	def configure_optimizers(self):
-		# optimizer = torch.optim.SGD(self.parameters(), lr=self.args.learning_rate, momentum=self.args.momentum, weight_decay=self.args.weight_decay)
-		optimizer = torch.optim.Adam(self.parameters(), lr=self.args.learning_rate)
+		if self.args.optimizer == 'sgd':
+			optimizer = torch.optim.SGD(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
+		elif self.args.optimizer == 'adam':
+			optimizer = torch.optim.Adam(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
+		else:
+			raise ValueError(f"optimizer must be 'sgd' or 'adam' not '{self.args.optimizer}'")
+
 		return optimizer
 
 
@@ -44,14 +52,11 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		video, audio, task_full, target = batch['video'], batch['audio'], batch['task_full'], batch['target']
 		output = self.model(video, audio, task_full)
 
-		loss = F.mse_loss(output, target)
-		# loss = self.criterion(output, target)
+		loss = self.loss_fn(output, target)
 		accuracy = ((output > 0.5) == target).float().mean()
 
 		self.log("loss/train", loss, sync_dist=True, on_step=True)
 		self.log("acc/train", accuracy, sync_dist=True, on_step=True)
-
-		# self.logger.experiment.add_scalars("losses", {"train_loss": loss})
 
 		return loss
 
@@ -60,26 +65,26 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		video, audio, task_full, target = batch['video'], batch['audio'], batch['task_full'], batch['target']
 		output = self.model(video, audio, task_full)
 
-		loss = F.mse_loss(output, target)
-		# loss = self.criterion(output, target)
+		loss = self.loss_fn(output, target)
 		accuracy = ((output > 0.5) == target).float().mean()
 
 		self.log("loss/val", loss, sync_dist=True)
 		self.log("acc/val", accuracy, sync_dist=True)
-
-		# self.logger.experiment.add_scalars("losses", {"val_loss": loss})
 
 		return loss
 
 
 
 def train(args):
+	torch.set_float32_matmul_precision('high')
+
 	model = Lightning_Attention_AVRNet(args)
 	train_loader, val_loader = create_dataset(args)
 
 	trainer = pl.Trainer(
-		accelerator="gpu", devices=1, strategy="ddp_find_unused_parameters_true", # strategy="ddp",
+		accelerator="gpu", devices=1, strategy="auto", # auto ddp_find_unused_parameters_true ddp
 		default_root_dir=args.checkpoint_dir,
+		min_epochs=args.epochs,
 		callbacks=[
 			EarlyStopping(monitor="loss/val", mode="min"),
 			ModelSummary(max_depth=2)
@@ -97,18 +102,18 @@ def create_dataset(args):
 		disable_pb=args.disable_pb
 	)
 
-	train_loader = load_data(args, mode='train', workers=0, cache_size=25, batch_size=128)
-	val_loader = load_data(args, mode='val', workers=0, cache_size=25, batch_size=2048)
+	train_loader = load_data(args, mode='train', workers=11, batch_size=128)
+	val_loader = load_data(args, mode='val', workers=2, batch_size=1024)
 
 	return train_loader, val_loader
 
 
-def load_data(args, mode, workers, cache_size=1, batch_size=256):
+def load_data(args, mode, workers, batch_size=256):
 	if mode=='train':
-		dataset = ClusteringDataset(args.train_features_path, args.disable_pb, video_proportion=args.video_proportion, cache_size=cache_size)
+		dataset = ClusteringDataset(args.train_features_path, args.disable_pb, video_proportion=args.video_proportion)
 
 	if mode=='val':
-		dataset = ClusteringDataset(args.val_features_path, args.disable_pb, video_proportion=args.val_video_proportion, cache_size=cache_size)
+		dataset = ClusteringDataset(args.val_features_path, args.disable_pb, video_proportion=args.val_video_proportion)
 
 	sampler = SequentialSampler(dataset)
 
@@ -117,6 +122,7 @@ def load_data(args, mode, workers, cache_size=1, batch_size=256):
 		batch_size=batch_size,
 		shuffle=False,
 		num_workers=workers,
+		persistent_workers=True,
 		sampler=sampler,
 		pin_memory=True,
 		drop_last=False,
@@ -202,7 +208,7 @@ def initialize_arguments(**kwargs):
 	assert Path(args.val_dataset_config['frames_path']).exists()
 
 	args.sys_path 						= 'model/third_party/avr_net/features'
-	args.checkpoint_dir 			= f'model/third_party/avr_net/checkpoints/{datetime.now().strftime("%Y_%m_%d %H:%M:%S")}'
+	args.checkpoint_dir 			= f'model/third_party/avr_net/checkpoints/'
 	args.train_features_path 	= f'{args.sys_path}/train_features_{int(args.video_proportion * 100)}p_{args.max_frames}f{'_aligned' if args.aligned else ''}.pckl'
 	args.val_features_path 		= f'{args.sys_path}/val_features_{int(args.val_video_proportion * 100)}p_{args.max_frames}f{'_aligned' if args.aligned else ''}.pckl'
 	args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
