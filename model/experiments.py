@@ -105,7 +105,7 @@ if __name__=='__main__':
 		'loss_fn':								'mse', 				# 'bce' 'mse'
 		'optimizer':							'sgd', 				# 'sgd' 'adam'
 		'learning_rate': 					0.002,
-		'momentum': 							0.005,				# Not working
+		'momentum': 							0.0,
 		'weight_decay': 					0.0001,
 		'step_size': 							4,
 		'gamma': 									0.6,
