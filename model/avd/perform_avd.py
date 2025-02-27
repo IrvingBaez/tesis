@@ -17,9 +17,7 @@ def perform_avd(args):
 		'frames_path': 			args.frames_path,
 		'tracks_path': 			args.tracks_path,
 		'sys_path': 				args.sys_path,
-		'checkpoint':				args.checkpoint,
-		'self_attention': 	args.self_attention,
-		'cross_attention': 	args.cross_attention
+		'checkpoint':				args.checkpoint
 	}
 
 	avr_net(**arguments)
@@ -56,8 +54,6 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--avd_detector', 		type=str, default="avr_net", 			help='Model to use for audio visual diarozation')
 	parser.add_argument('--checkpoint',				type=str, default='', 						help='Checkpoint to evaluate')
 	parser.add_argument('--aligned', 					action='store_true', 							help='Used aligned frame crops')
-	parser.add_argument('--self_attention', 	type=str, default='',							help='Self attention method to marge available frame features')
-	parser.add_argument('--cross_attention', 	type=str, default='',							help='Cross attention method to marge frame and audio features')
 
 	args = util.argparse_helper(parser, **kwargs)
 

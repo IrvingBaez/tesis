@@ -2,10 +2,8 @@ import argparse
 import os
 import torch
 import torch.nn as nn
-from datetime import datetime
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader, SequentialSampler
-from tqdm.auto import tqdm
 from pathlib import Path
 import torch.nn.functional as F
 
@@ -16,8 +14,9 @@ from .tools.clustering_dataset import ClusteringDataset
 from .tools.custom_collator import CustomCollator
 
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelSummary
+from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+from torchmetrics.classification import BinaryF1Score
 
 
 class Lightning_Attention_AVRNet(pl.LightningModule):
@@ -34,17 +33,20 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 			raise ValueError(f"loss_fn must be 'bce' or 'mse' not '{args.loss_fn}'")
 
 		self.model = Attention_AVRNet(self.args.self_attention, self.args.cross_attention, dropout=self.args.self_attention_dropout)
+		self.metric = BinaryF1Score()
 
 
 	def configure_optimizers(self):
 		if self.args.optimizer == 'sgd':
-			optimizer = torch.optim.SGD(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
+			optimizer = torch.optim.SGD(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay, momentum=self.args.momentum)
 		elif self.args.optimizer == 'adam':
 			optimizer = torch.optim.Adam(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
 		else:
 			raise ValueError(f"optimizer must be 'sgd' or 'adam' not '{self.args.optimizer}'")
 
-		return optimizer
+		lr_scheduler = StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
+
+		return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler}
 
 
 	# TODO: Freeze parameters
@@ -54,9 +56,11 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 		loss = self.loss_fn(output, target)
 		accuracy = ((output > 0.5) == target).float().mean()
+		fscore = self.metric(output, target)
 
-		self.log("loss/train", loss, sync_dist=True, on_step=True)
-		self.log("acc/train", accuracy, sync_dist=True, on_step=True)
+		self.log("loss/train", 			loss, 			sync_dist=True, on_step=True)
+		self.log("acc/train", 			accuracy, 	sync_dist=True, on_step=True)
+		self.log("f1_score/train", 	fscore, 		sync_dist=True, on_step=True)
 
 		return loss
 
@@ -67,9 +71,11 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 		loss = self.loss_fn(output, target)
 		accuracy = ((output > 0.5) == target).float().mean()
+		fscore = self.metric(output, target)
 
-		self.log("loss/val", loss, sync_dist=True)
-		self.log("acc/val", accuracy, sync_dist=True)
+		self.log("loss/val", 			loss, 			sync_dist=True)
+		self.log("acc/val", 			accuracy, 	sync_dist=True)
+		self.log("f1_score/val", 	fscore, 		sync_dist=True)
 
 		return loss
 
@@ -78,7 +84,13 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 def train(args):
 	torch.set_float32_matmul_precision('high')
 
-	model = Lightning_Attention_AVRNet(args)
+	if args.checkpoint:
+		print(f'Loading checkpoint from: {args.checkpoint}')
+		model = Lightning_Attention_AVRNet.load_from_checkpoint(args.checkpoint)
+	else:
+		print('Loading default model weights')
+		model = Lightning_Attention_AVRNet(args)
+
 	train_loader, val_loader = create_dataset(args)
 
 	trainer = pl.Trainer(
@@ -86,8 +98,8 @@ def train(args):
 		default_root_dir=args.checkpoint_dir,
 		min_epochs=args.epochs,
 		callbacks=[
-			EarlyStopping(monitor="loss/val", mode="min"),
-			ModelSummary(max_depth=2)
+			ModelCheckpoint(monitor="acc/val"),
+			EarlyStopping(monitor="acc/val", mode="max")
 		],
 	)
 
@@ -148,29 +160,27 @@ def load_model(args):
 def initialize_arguments(**kwargs):
 	parser = argparse.ArgumentParser(description = "Attention AVR-Net training")
 
-	# DATA CONFIGURATION
-	parser.add_argument('--aligned', 					action='store_true', help='Wether or not to use alined frames')
-	parser.add_argument('--max_frames', 			type=int, help='How many frames to use in self-attention')
-
 	# TRAINING CONFIGURATION
-	# parser.add_argument('--gpu_batch_size',	type=int,	help='Training batch size per GPU', default=4)
-	parser.add_argument('--learning_rate',					type=float,	help='Training base learning rate', default=0.0005)
-	parser.add_argument('--momentum',								type=float,	help='Training momentum for SDG optimizer', default=0.05)
-	parser.add_argument('--weight_decay',						type=float,	help='Training weight decay for SDG optimizer', default=0.0001)
-	parser.add_argument('--step_size',							type=int,		help='Training stepsize for StepLR scheduler', default=5)
-	parser.add_argument('--gamma',									type=float,	help='Training gamma for StepLR scheduler', default=0.5)
-	parser.add_argument('--video_proportion', 			type=float, help='Percentage of available videos to use in training')
-	parser.add_argument('--val_video_proportion', 	type=float, help='Percentage of available videos to use in validation')
-	parser.add_argument('--epochs', 								type=int, 	help='Epochs to add to the training of the checkpoint', default=10)
-	parser.add_argument('--frozen_epochs', 					type=int, 	help='Epochs to train without updating relation network weights', default=0)
-	parser.add_argument('--self_attention', 				type=str, 	help='Self attention method to marge available frame features', default='')
-	parser.add_argument('--self_attention_dropout', type=float, help='Dropout used in self-attention transformer', default=0.1)
-	parser.add_argument('--cross_attention', 				type=str, 	help='Cross attention method to marge frame and audio features', default='')
-	parser.add_argument('--disable_pb', 						action='store_true', help='If true, hides progress bars')
-
+	parser.add_argument('--learning_rate',					type=float,	default=0.001, 	help='Training base learning rate')
+	parser.add_argument('--momentum',								type=float, default=0.0,		help='Training momentum for SDG optimizer. Ignored if Adam optimizer is selected.')
+	parser.add_argument('--weight_decay',						type=float, default=0.0001,	help='Training weight decay for SDG optimizer')
+	parser.add_argument('--step_size',							type=int, 	default=5,			help='Training stepsize for StepLR scheduler')
+	parser.add_argument('--gamma',									type=float, default=0.5,		help='Training gamma for StepLR scheduler')
+	parser.add_argument('--video_proportion', 			type=float, default=1.0,		help='Percentage of available videos to use in training')
+	parser.add_argument('--val_video_proportion', 	type=float, default=1.0,		help='Percentage of available videos to use in validation')
+	parser.add_argument('--epochs', 								type=int, 	default=10, 		help='Epochs to add to the training of the checkpoint')
+	parser.add_argument('--frozen_epochs', 					type=int, 	default=0, 			help='Epochs to train without updating relation network weights')
+	parser.add_argument('--self_attention', 				type=str, 	default='',			help='Self attention method to marge available frame features')
+	parser.add_argument('--self_attention_dropout', type=float, default=0.1, 		help='Dropout used in self-attention transformer')
+	parser.add_argument('--cross_attention', 				type=str, 	default='', 		help='Cross attention method to marge frame and audio features')
+	parser.add_argument('--loss_fn', 								type=str, 	default='', 		help='Loss function to use during training')
+	parser.add_argument('--optimizer', 							type=str, 	default='', 		help='Optimizer to use during training')
+	parser.add_argument('--disable_pb', 						action='store_true', 				help='If true, hides progress bars')
+	# DATA CONFIGURATION
+	parser.add_argument('--max_frames', 						type=int, 	default=1,			help='How many frames to use in self-attention')
+	parser.add_argument('--aligned', 								action='store_true', 				help='Wether or not to use alined frames')
 	# MODEL CONFIGURATION
-	parser.add_argument('--relation_layer', type=str, help='Type of relation to use', default='original')
-	parser.add_argument('--checkpoint', 		type=str,	help='Path of checkpoint to continue training', default=None)
+	parser.add_argument('--checkpoint', 						type=str,		default=None, 	help='Path of checkpoint to continue training', )
 
 	args = argparse_helper(parser, **kwargs)
 

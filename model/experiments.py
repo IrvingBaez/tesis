@@ -100,17 +100,17 @@ if __name__=='__main__':
 		# Architecture
 		'self_attention': 				'pick_first', # 'class_token' or 'pick_first',
 		'self_attention_dropout': 0.2,
-		'cross_attention':	 			'concat', # 'fusion' or 'concat'
+		'cross_attention':	 			'concat', 		# 'fusion' or 'concat'
 		# Hyperparams
-		'loss_fn':								'bce', # 'bce' 'mse'
-		'optmizer':								'sgd', # 'sgd' 'adam'
-		'learning_rate': 					0.001,
-		'momentum': 							0.005,
+		'loss_fn':								'mse', 				# 'bce' 'mse'
+		'optimizer':							'sgd', 				# 'sgd' 'adam'
+		'learning_rate': 					0.002,
+		'momentum': 							0.005,				# Not working
 		'weight_decay': 					0.0001,
-		'step_size': 							5,
-		'gamma': 									0.5,
+		'step_size': 							4,
+		'gamma': 									0.6,
 		'epochs': 								15,
-		'frozen_epochs': 					0,
+		'frozen_epochs': 					0,						# Not working
 	}
 
 	print('Starting training with params: ', train_params)
@@ -118,26 +118,27 @@ if __name__=='__main__':
 	train_lightning_avd(**train_params)
 
 	print('\n\n7- AUDIO VISUAL DIARIZATION')
+	checkpoints = [
+		'model/third_party/avr_net/checkpoints/lightning_logs/sgd+mse_loss/checkpoints/epoch=14-step=537810.ckpt'
+	]
 	avd_tests = []
 	for vad_detector in ['ground_truth']:#, 'dihard18']:
 		for asd_detector in ['ground_truth']:#, 'light_asd', 'talk_net']:
 			for denoiser in ['dihard18']:#, 'noisereduce', 'original']:
 				for aligned in [False]: # True]:
-					avd_tests.append({
-						'data_type': 				data_type,
-						'denoiser': 				denoiser,
-						'vad_detector': 		vad_detector,
-						'asd_detector': 		asd_detector,
-						'aligned': 					aligned,
-						'avd_detector': 		'avr_net',
-						'checkpoint':				checkpoint,
-						'self_attention': 	train_params['self_attention'],
-						'cross_attention': 	train_params['cross_attention']
-					})
+					for checkpoint in checkpoints:
+						avd_tests.append({
+							'data_type': 				'val',
+							'denoiser': 				denoiser,
+							'vad_detector': 		vad_detector,
+							'asd_detector': 		asd_detector,
+							'aligned': 					aligned,
+							'checkpoint':				checkpoint
+						})
 
 	for params in avd_tests:
 		print(params)
-		perform_avd(**params)
+		# perform_avd(**params)
 		print('')
 
 

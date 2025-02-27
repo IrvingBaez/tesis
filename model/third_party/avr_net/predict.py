@@ -9,6 +9,7 @@ from model.third_party.avr_net.tools.dataset import CustomDataset
 from model.third_party.avr_net.tools.clustering_dataset import ClusteringDataset
 from model.third_party.avr_net.tools.feature_extractor import FeatureExtractor
 from model.third_party.avr_net.attention_avr_net import Attention_AVRNet
+from model.third_party.avr_net.train_lightning import Lightning_Attention_AVRNet
 from model.third_party.avr_net.tools.write_rttms import main as write_rttms
 
 from model.util import argparse_helper, save_data, check_system_usage, show_similarities
@@ -124,7 +125,8 @@ def compute_similarity(args):
 
 
 def load_model(args):
-	model = Attention_AVRNet(args.self_attention, args.cross_attention)
+	model = Lightning_Attention_AVRNet.load_from_checkpoint(args.checkpoint)
+
 	model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
 	model= nn.DataParallel(model)
 	model.to(args.device)
@@ -152,8 +154,6 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--sys_path',			type=str,	help='Path to the folder where to save all the system outputs')
 
 	# MODEL CONFIGURATION
-	parser.add_argument('--self_attention', 	type=str, help='Self attention method to marge available frame features', default='')
-	parser.add_argument('--cross_attention', 	type=str, help='Cross attention method to marge frame and audio features', default='')
 	parser.add_argument('--checkpoint', 			type=str,	help='Path of checkpoint to load and eval', default=None)
 
 	args = argparse_helper(parser, **kwargs)
