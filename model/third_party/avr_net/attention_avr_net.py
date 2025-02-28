@@ -21,9 +21,25 @@ class Attention_AVRNet(nn.Module):
 		else:
 			self.cross_attention 	= attention.Concat()
 
-		self.relation_layer		= RelationLayer('model/third_party/avr_net/weights/best_relation.ckpt')
+		self.relation_layer	= RelationLayer('model/third_party/avr_net/weights/best_relation.ckpt')
 		self.bna = nn.BatchNorm2d(256)
 		self.bna.load_state_dict(self.relation_layer.bna.state_dict())
+
+
+	def freeze_relation(self):
+		for param in self.relation_layer.parameters():
+			param.requires_grad = False
+
+		# for param in self.bna.parameters():
+		# 	param.requires_grad = False
+
+
+	def unfreeze_relation(self):
+		for param in self.relation_layer.parameters():
+			param.requires_grad = True
+
+		# for param in self.bna.parameters():
+		# 	param.requires_grad = True
 
 
 	def forward(self, video, audio, task):

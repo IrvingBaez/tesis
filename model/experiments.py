@@ -94,6 +94,7 @@ if __name__=='__main__':
 		'video_proportion': 			1.0,
 		'val_video_proportion':		1.0,
 		'aligned': 								False,
+		'balanced':								True,
 		'checkpoint': 						'',
 		'max_frames': 						1,
 		'disable_pb': 						False,
@@ -108,9 +109,9 @@ if __name__=='__main__':
 		'momentum': 							0.0,
 		'weight_decay': 					0.0001,
 		'step_size': 							4,
-		'gamma': 									0.6,
+		'gamma': 									0.8,
 		'epochs': 								15,
-		'frozen_epochs': 					0,						# Not working
+		'frozen_epochs': 					15,
 	}
 
 	print('Starting training with params: ', train_params)

@@ -33,6 +33,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 			raise ValueError(f"loss_fn must be 'bce' or 'mse' not '{args.loss_fn}'")
 
 		self.model = Attention_AVRNet(self.args.self_attention, self.args.cross_attention, dropout=self.args.self_attention_dropout)
+		self.model.freeze_relation()
 		self.metric = BinaryF1Score()
 
 
@@ -44,12 +45,16 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		else:
 			raise ValueError(f"optimizer must be 'sgd' or 'adam' not '{self.args.optimizer}'")
 
-		lr_scheduler = StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
+		lr_scheduler = StepLR(optimizer, step_size=self.args.step_size, gamma=self.args.gamma)
 
 		return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler}
 
 
-	# TODO: Freeze parameters
+	def on_train_epoch_start(self):
+		if self.current_epoch >= self.args.frozen_epochs:
+			self.model.unfreeze_relation()
+
+
 	def training_step(self, batch, batch_idx):
 		video, audio, task_full, target = batch['video'], batch['audio'], batch['task_full'], batch['target']
 		output = self.model(video, audio, task_full)
@@ -122,7 +127,7 @@ def create_dataset(args):
 
 def load_data(args, mode, workers, batch_size=256):
 	if mode=='train':
-		dataset = ClusteringDataset(args.train_features_path, args.disable_pb, video_proportion=args.video_proportion)
+		dataset = ClusteringDataset(args.train_features_path, args.disable_pb, video_proportion=args.video_proportion, balanced=args.balanced)
 
 	if mode=='val':
 		dataset = ClusteringDataset(args.val_features_path, args.disable_pb, video_proportion=args.val_video_proportion)
@@ -179,6 +184,7 @@ def initialize_arguments(**kwargs):
 	# DATA CONFIGURATION
 	parser.add_argument('--max_frames', 						type=int, 	default=1,			help='How many frames to use in self-attention')
 	parser.add_argument('--aligned', 								action='store_true', 				help='Wether or not to use alined frames')
+	parser.add_argument('--balanced',								action='store_true', 				help='Balance positives and negatives examples in training data.')
 	# MODEL CONFIGURATION
 	parser.add_argument('--checkpoint', 						type=str,		default=None, 	help='Path of checkpoint to continue training', )
 
