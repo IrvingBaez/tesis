@@ -105,42 +105,27 @@ if __name__=='__main__':
 		# Hyperparams
 		'loss_fn':								'mse', 				# 'bce' 'mse'
 		'optimizer':							'sgd', 				# 'sgd' 'adam'
-		'learning_rate': 					0.002,
+		'learning_rate': 					0.00001,
 		'momentum': 							0.0,
-		'weight_decay': 					0.0001,
-		'step_size': 							4,
-		'gamma': 									0.8,
-		'epochs': 								15,
-		'frozen_epochs': 					15,
+		'weight_decay': 					0.0,
+		'step_size': 							1,
+		'gamma': 									0.99,
+		'epochs': 								50,
+		'frozen_epochs': 					0,
 	}
 
 	print('Starting training with params: ', train_params)
-	# checkpoint = train_avd(**train_params)
 	train_lightning_avd(**train_params)
 
-	print('\n\n7- AUDIO VISUAL DIARIZATION')
-	checkpoints = [
-		'model/third_party/avr_net/checkpoints/lightning_logs/sgd+mse_loss/checkpoints/epoch=14-step=537810.ckpt'
-	]
-	avd_tests = []
-	for vad_detector in ['ground_truth']:#, 'dihard18']:
-		for asd_detector in ['ground_truth']:#, 'light_asd', 'talk_net']:
-			for denoiser in ['dihard18']:#, 'noisereduce', 'original']:
-				for aligned in [False]: # True]:
-					for checkpoint in checkpoints:
-						avd_tests.append({
-							'data_type': 				'val',
-							'denoiser': 				denoiser,
-							'vad_detector': 		vad_detector,
-							'asd_detector': 		asd_detector,
-							'aligned': 					aligned,
-							'checkpoint':				checkpoint
-						})
+	# print('\n\n7- AUDIO VISUAL DIARIZATION')
+	# checkpoints = [
+	# 	'model/third_party/avr_net/checkpoints/lightning_logs/version_796101/checkpoints/epoch=8-step=224100.ckpt'
+	# ]
 
-	for params in avd_tests:
-		print(params)
-		# perform_avd(**params)
-		print('')
+	# for checkpoint in checkpoints:
+	# 	print(checkpoint)
+	# 	perform_avd(aligned=False, checkpoint=checkpoint, max_frames=1)
+	# 	print('')
 
 
 	# print('\n\n8- VISUALIZATION')

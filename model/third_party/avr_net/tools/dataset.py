@@ -15,7 +15,7 @@ class CustomDataset(Dataset):
 		super().__init__()
 		self._max_frames		= 200
 		self._min_frames		= 20
-		self._step_frame		= 100
+		self._step_frame		= 50
 
 		# TODO: Implement missing_rate
 		self.missing_rate 	= 0
@@ -44,7 +44,7 @@ class CustomDataset(Dataset):
 		self.image_counts = []
 
 		self._load_dataset()
-		save_data(self.image_counts, f'db_image_counts_{self.video_ids[0]}.pckl')
+		# save_data(self.image_counts, f'db_image_counts_{self.video_ids[0]}.pckl')
 
 
 	def __len__(self):

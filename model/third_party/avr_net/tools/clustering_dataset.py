@@ -5,6 +5,7 @@ import math
 import os
 from pathlib import Path
 
+import numpy as np
 import random
 import pandas as pd
 import torch
@@ -39,9 +40,14 @@ class ClusteringDataset(Dataset):
 		self.cache_hits = 0.0
 		self.cache_misses = 0.0
 
+		self._starts = {}
+		self._ends = {}
+
 		for video_id in tqdm(self.video_ids, desc='Indexing clustering dataset', disable=self.disable_pb):
 			utterances = self._dict_features_to_items(video_id)
 
+			self._starts[video_id]	= np.array([utterance['start'] for utterance in utterances])
+			self._ends[video_id] 		= np.array([utterance['end'] for utterance in utterances])
 			self.utterance_counts[video_id] = len(utterances)
 			self._video_ranges.append(self._video_ranges[-1] + self._pairs_in_video(video_id))
 
@@ -49,7 +55,19 @@ class ClusteringDataset(Dataset):
 
 		self.balanced_indices = None
 		if self.balanced:
-			self.balanced_indices = self.balance()
+			self.balanced_indices = self._balance()
+
+
+	def starts(self):
+		assert not self.balanced, 'It seems you are calculating DER on a balanced dataset. This is not contemplated in the project.'
+
+		return self._starts
+
+
+	def ends(self):
+		assert not self.balanced, 'It seems you are calculating DER on a balanced dataset. This is not contemplated in the project.'
+
+		return self._ends
 
 
 	def __len__(self):
@@ -108,7 +126,7 @@ class ClusteringDataset(Dataset):
 		return ((n - 1) * n) // 2
 
 
-	def balance(self):
+	def _balance(self):
 		new_indices_path = f'{self.features_path}/balanced_indices.pth'
 		if Path(new_indices_path).exists(): return torch.load(new_indices_path)
 
@@ -168,6 +186,9 @@ class ClusteringDataset(Dataset):
 		task_2 = 2 * visible_b + visible_a
 
 		item = {
+			'video_id': video_id,
+			'index_a': torch.LongTensor([i]),
+			'index_b': torch.LongTensor([j]),
 			'video': video_features,
 			'audio': audio_features,
 			'task_full': [task_1, task_2],
@@ -197,7 +218,9 @@ class ClusteringDataset(Dataset):
 				'video_features':	feat_video,
 				'audio_features':	feat_audio,
 				'visible':				visible,
-				'target':					target
+				'target':					target,
+				'start':					start,
+				'end':						end
 			})
 
 		return video_features

@@ -8,7 +8,9 @@ from pathlib import Path
 import torch.nn.functional as F
 
 from model.third_party.avr_net.attention_avr_net import Attention_AVRNet
-from model.util import argparse_helper, get_path
+from model.third_party.avr_net.tools.write_rttms import main as write_rttms
+from model.avd.score_avd import main as score_avd
+from model.util import argparse_helper, get_path, save_data
 from .feature_extraction import main as extract_features
 from .tools.clustering_dataset import ClusteringDataset
 from .tools.custom_collator import CustomCollator
@@ -16,7 +18,7 @@ from .tools.custom_collator import CustomCollator
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
-from torchmetrics.classification import BinaryF1Score
+from torchmetrics.classification import BinaryF1Score, BinaryPrecision, BinaryRecall
 
 
 class Lightning_Attention_AVRNet(pl.LightningModule):
@@ -32,9 +34,17 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		else:
 			raise ValueError(f"loss_fn must be 'bce' or 'mse' not '{args.loss_fn}'")
 
+		self.starts = args.starts if 'starts' in vars(args) else None
+		self.ends = args.ends if 'ends' in vars(args) else None
+		self.utterance_counts = args.utterance_counts if 'utterance_counts' in vars(args) else None
+
 		self.model = Attention_AVRNet(self.args.self_attention, self.args.cross_attention, dropout=self.args.self_attention_dropout)
 		self.model.freeze_relation()
 		self.metric = BinaryF1Score()
+		self.metric_recall = BinaryRecall()
+		self.metric_precision = BinaryPrecision()
+
+		self.validation_predictions = None
 
 
 	def configure_optimizers(self):
@@ -70,24 +80,84 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		return loss
 
 
+	def on_validation_epoch_start(self):
+		self.validation_predictions = []
+
+
 	def validation_step(self, batch, batch_idx):
 		video, audio, task_full, target = batch['video'], batch['audio'], batch['task_full'], batch['target']
-		output = self.model(video, audio, task_full)
+		scores = self.model(video, audio, task_full)
 
-		loss = self.loss_fn(output, target)
-		accuracy = ((output > 0.5) == target).float().mean()
-		fscore = self.metric(output, target)
+		loss = 			self.loss_fn(scores, target)
+		accuracy = 	((scores > 0.5) == target).float().mean()
+		fscore = 		self.metric(scores, target)
+		recall = 		self.metric_recall(scores, target)
+		precision = self.metric_precision(scores, target)
 
 		self.log("loss/val", 			loss, 			sync_dist=True)
 		self.log("acc/val", 			accuracy, 	sync_dist=True)
 		self.log("f1_score/val", 	fscore, 		sync_dist=True)
+		self.log("recall/val", 		recall, 		sync_dist=True)
+		self.log("precision/val", precision, 	sync_dist=True)
+
+		for video_id, index_a, index_b, score in zip(batch['video_id'], batch['index_a'], batch['index_b'], scores):
+			self.validation_predictions.append((video_id, index_a, index_b, score.cpu()))
 
 		return loss
+
+
+	# Calculate DER as part of validation end
+	def on_validation_epoch_end(self):
+		similarities = {}
+
+		for video_id in self.args.val_dataset_config['video_ids']:
+			similarities[video_id] = torch.diag_embed(torch.ones([self.utterance_counts[video_id]]))
+
+		for prediction in self.validation_predictions:
+			video_id, index_a, index_b, score = prediction
+
+			similarities[video_id][index_a, index_b] = score
+			similarities[video_id][index_b, index_a] = score
+
+		self.validation_predictions = None
+
+		similarities_path = f'{self.logger.log_dir}/similarities.pth'
+		sys_path = f'{self.logger.log_dir}/rttms'
+
+		similarity_data = {'similarities': similarities, 'starts': self.starts, 'ends': self.ends}
+		save_data(similarity_data, similarities_path, verbose=True, override=True)
+		write_rttms(similarities_path=similarities_path, sys_path=sys_path, data_type='val')
+
+		score_avd(data_type='val', sys_path=f'{sys_path}/val.out', output_path=f'{sys_path}/val_scores.out')
+
+		with open(f'{sys_path}/val_scores.out', 'r') as file:
+			scores = file.read()
+
+		last_line = scores.split('\n')[-1]
+		der = float(last_line.split()[3])
+
+		self.log("der/val", der, 	sync_dist=True)
+
+
+	def predict_step(self, batch, batch_idx, dataloader_idx=0):
+		predictions = []
+		scores = self.model(batch['video'], batch['audio'], batch['task_full'])
+
+		for video_id, index_a, index_b, score in zip(batch['video_id'], batch['index_a'], batch['index_b'], scores):
+			predictions.append((video_id, index_a, index_b, score.cpu()))
+
+		return predictions
 
 
 
 def train(args):
 	torch.set_float32_matmul_precision('high')
+
+	train_loader, val_loader = create_dataset(args)
+
+	args.utterance_counts = val_loader.dataset.utterance_counts
+	args.starts = val_loader.dataset.starts()
+	args.ends = val_loader.dataset.ends()
 
 	if args.checkpoint:
 		print(f'Loading checkpoint from: {args.checkpoint}')
@@ -96,17 +166,18 @@ def train(args):
 		print('Loading default model weights')
 		model = Lightning_Attention_AVRNet(args)
 
-	train_loader, val_loader = create_dataset(args)
-
 	trainer = pl.Trainer(
 		accelerator="gpu", devices=1, strategy="auto", # auto ddp_find_unused_parameters_true ddp
 		default_root_dir=args.checkpoint_dir,
 		min_epochs=args.epochs,
 		callbacks=[
-			ModelCheckpoint(monitor="acc/val"),
-			EarlyStopping(monitor="acc/val", mode="max")
+			ModelCheckpoint(monitor="f1_score/val"),
+			EarlyStopping(monitor="f1_score/val", mode="max")
 		],
 	)
+
+	# trainer = pl.Trainer(fast_dev_run=True)
+	# trainer.fit(model, train_dataloaders=train_loader)
 
 	trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 

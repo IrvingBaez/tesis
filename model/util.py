@@ -1,6 +1,7 @@
 import os
 import torch
 import psutil
+import numpy as np
 from PIL import Image
 
 
@@ -141,7 +142,14 @@ def show_similarities(folder, similarities):
 
 	for key, value in similarities.items():
 		tensor_img = (value * 255).byte()
-		image = Image.fromarray(tensor_img.numpy(), mode='L')
+		img_array = np.stack([tensor_img.numpy()] * 3, axis=-1)  # Escala de grises
+
+		mask_0 = value == 0.0
+		mask_1 = value == 1.0
+		img_array[mask_0] = [255, 0, 0]
+		img_array[mask_1] = [0, 255, 0]
+
+		image = Image.fromarray(img_array.astype(np.uint8), mode='RGB')
 		image.save(f"{folder}/{key}.png")
 
 

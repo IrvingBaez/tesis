@@ -102,7 +102,7 @@ def merge_features(dicts):
 def initialize_arguments(**kwargs):
 	parser = argparse.ArgumentParser(description = "AVA-AVD utterance feature extraction.")
 
-	parser.add_argument('--sys_path', 							type=str, 	help='Root path to save features', default='')
+	parser.add_argument('--sys_path', 							type=str, 	help='Root path to save features. Depreciated.', default='')
 	parser.add_argument('--aligned', 								action='store_true', help='Wether or not to use alined frames')
 	parser.add_argument('--max_frames', 						type=int, help='How many frames to use in self-attention')
 	parser.add_argument('--disable_pb', 						action='store_true', help='If true, hides progress bars')
@@ -142,6 +142,7 @@ def initialize_arguments(**kwargs):
 	assert Path(args.val_dataset_config['labs_path']).exists()
 	assert Path(args.val_dataset_config['frames_path']).exists()
 
+	args.sys_path = 'model/third_party/avr_net/features'
 	args.features_path = f'{args.sys_path}/{args.max_frames}_frames'
 	if args.aligned: args.features_path += '_aligned'
 

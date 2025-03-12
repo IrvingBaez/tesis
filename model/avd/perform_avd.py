@@ -1,23 +1,21 @@
-import argparse, os
+import argparse
 import model.util as util
+import os
 from datetime import datetime
 from model.avd.score_avd import main as score_avd
 from pathlib import Path
 
 from model.third_party.avr_net.predict import main as avr_net
 
+
 def perform_avd(args):
 	arguments = {
-		'data_type':				args.data_type,
-		'video_ids':				','.join(args.video_ids),
-		'videos_path':			args.videos_path,
-		'waves_path': 			args.waves_path,
-		'labs_path': 				args.labs_path,
-		'rttms_path': 			args.rttms_path,
-		'frames_path': 			args.frames_path,
-		'tracks_path': 			args.tracks_path,
-		'sys_path': 				args.sys_path,
-		'checkpoint':				args.checkpoint
+		'data_type':	'val',
+		'video_ids':	','.join(args.video_ids),
+		'sys_path': 	args.sys_path,
+		'checkpoint':	args.checkpoint,
+		'aligned':		args.aligned,
+		'max_frames':	args.max_frames
 	}
 
 	avr_net(**arguments)
@@ -26,55 +24,37 @@ def perform_avd(args):
 
 
 def score_avd_validation(args):
-	score_avd(data_type=args.data_type, avd_detector=args.avd_detector)
+	score_path = f'{args.sys_path}/val_scores.out'
+	score_avd(data_type='val', sys_path=f'{args.sys_path}/val.out', output_path=score_path)
 
-	score_path = util.get_path('avd_path', avd_detector = args.avd_detector) + '/scores.out'
 	with open(score_path, 'r') as file:
 		scores = file.read()
 
 	timestamp = datetime.now().strftime('%Y_%b_%d_%H:%M:%S')
 	with open(f'{args.save_dir}/{timestamp}.out', 'w') as file:
-		file.write(f'data_type:    {args.data_type}\n')
-		file.write(f'denoiser:     {args.denoiser}\n')
-		file.write(f'vad_detector: {args.vad_detector}\n')
-		file.write(f'asd_detector: {args.asd_detector}\n')
-		file.write(f'avd_detector: {args.avd_detector}\n')
+		file.write(f'data_type:    val\n')
 		file.write(f'aligned:      {args.aligned}\n\n')
 		file.write(scores)
 
 	print(scores.split('\n')[-1])
 
+
 def initialize_arguments(**kwargs):
 	parser = argparse.ArgumentParser(description = "Arguments for data preprocessing")
 
-	parser.add_argument('--data_type',				type=str, default="val", 					help='Data type to process')
-	parser.add_argument('--denoiser', 				type=str, default="dihard18", 		help='Model used to denoise video sound')
-	parser.add_argument('--vad_detector', 		type=str, default="ground_truth", help='Voice activity detector to find off-screen speakers')
-	parser.add_argument('--asd_detector', 		type=str, default="ground_truth", help='Active speacker detection used for face cropping')
-	parser.add_argument('--avd_detector', 		type=str, default="avr_net", 			help='Model to use for audio visual diarozation')
-	parser.add_argument('--checkpoint',				type=str, default='', 						help='Checkpoint to evaluate')
-	parser.add_argument('--aligned', 					action='store_true', 							help='Used aligned frame crops')
+	parser.add_argument('--checkpoint',	type=str,							help='Checkpoint to evaluate')
+	parser.add_argument('--max_frames',	type=int,							help='How many frames to use in self-attention')
+	parser.add_argument('--aligned', 		action='store_true',	help='Used aligned frame crops')
 
 	args = util.argparse_helper(parser, **kwargs)
 
-	with open(f'dataset/split/{args.data_type}.list', 'r') as file:
+	with open(f'dataset/split/val.list', 'r') as file:
 		args.video_ids = file.read().split('\n')
 
-	args.videos_path	= util.get_path('videos_path')
-	args.waves_path 	= util.get_path('waves_path', denoiser=args.denoiser)
-	args.labs_path 		= util.get_path('vad_path', vad_detector=args.vad_detector) + '/predictions'
-	args.rttms_path 	= util.get_path('avd_path', avd_detector='ground_truth') + '/predictions'
+	args.save_dir = f'model/third_party/avr_net/results/{args.checkpoint.split('/')[5]}'
+	args.sys_path = args.save_dir
 
-	asd_path 					= util.get_path('asd_path', asd_detector=args.asd_detector)
-	args.frames_path 	= f'{asd_path}/aligned_tracklets' if args.aligned else f'{asd_path}/tracklets'
-	args.tracks_path 	= f'{asd_path}/predictions'
-
-	args.save_dir = args.checkpoint.rsplit('/', 1)[0]
-
-	assert Path(args.waves_path).exists()
-	assert Path(args.frames_path).exists()
-
-	args.sys_path = util.get_path('avd_path', avd_detector= args.avd_detector)
+	os.makedirs(args.save_dir, exist_ok=True)
 
 	return args
 

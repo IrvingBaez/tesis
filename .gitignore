@@ -5,6 +5,7 @@ dataset/vad/
 dataset/asd/
 dataset/avd/
 dataset/face_clips/
+model/third_party/avr_net/results/
 
 # Downloadable model
 *.pth
