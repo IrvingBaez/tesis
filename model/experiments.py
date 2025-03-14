@@ -96,15 +96,16 @@ if __name__=='__main__':
 		'aligned': 								False,
 		'balanced':								True,
 		'checkpoint': 						'',
-		'max_frames': 						1,
+		'max_frames': 						60,
 		'disable_pb': 						False,
+		'db_video_mode': 					'average',	# 'pick_first' 'pick_random' 'keep_all' 'average'
 		# Architecture
-		'self_attention': 				'pick_first', # 'class_token' or 'pick_first',
+		'self_attention': 				'pick_first', 	# 'class_token' 'pick_first',
 		'self_attention_dropout': 0.2,
-		'cross_attention':	 			'concat', 		# 'fusion' or 'concat'
+		'cross_attention':	 			'concat', 			# 'fusion' 'concat'
 		# Hyperparams
-		'loss_fn':								'mse', 				# 'bce' 'mse'
-		'optimizer':							'sgd', 				# 'sgd' 'adam'
+		'loss_fn':								'mse', 					# 'bce' 'mse'
+		'optimizer':							'sgd', 					# 'sgd' 'adam'
 		'learning_rate': 					0.00001,
 		'momentum': 							0.0,
 		'weight_decay': 					0.0,

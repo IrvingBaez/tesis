@@ -187,6 +187,7 @@ def create_dataset(args):
 		sys_path=args.sys_path,
 		aligned=args.aligned,
 		max_frames=args.max_frames,
+		db_video_mode=args.db_video_mode,
 		disable_pb=args.disable_pb
 	)
 
@@ -254,7 +255,8 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--disable_pb', 						action='store_true', 				help='If true, hides progress bars')
 	# DATA CONFIGURATION
 	parser.add_argument('--max_frames', 						type=int, 	default=1,			help='How many frames to use in self-attention')
-	parser.add_argument('--aligned', 								action='store_true', 				help='Wether or not to use alined frames')
+	parser.add_argument('--db_video_mode', 					type=str, 	default='pick_first',	help='Selection mode for video frames in the dataset')
+	parser.add_argument('--aligned', 								action='store_true', 				help='Wether or not to use aligned frames')
 	parser.add_argument('--balanced',								action='store_true', 				help='Balance positives and negatives examples in training data.')
 	# MODEL CONFIGURATION
 	parser.add_argument('--checkpoint', 						type=str,		default=None, 	help='Path of checkpoint to continue training', )
@@ -294,12 +296,10 @@ def initialize_arguments(**kwargs):
 	assert Path(args.val_dataset_config['labs_path']).exists()
 	assert Path(args.val_dataset_config['frames_path']).exists()
 
-	args.sys_path 						= 'model/third_party/avr_net/features'
-	args.checkpoint_dir 			= f'model/third_party/avr_net/checkpoints/'
-	args.train_features_path 	= f'{args.sys_path}/train_features_{int(args.video_proportion * 100)}p_{args.max_frames}f{'_aligned' if args.aligned else ''}.pckl'
-	args.val_features_path 		= f'{args.sys_path}/val_features_{int(args.val_video_proportion * 100)}p_{args.max_frames}f{'_aligned' if args.aligned else ''}.pckl'
-	args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+	args.sys_path 			= 'model/third_party/avr_net/features'
+	args.checkpoint_dir = f'model/third_party/avr_net/checkpoints/'
 
+	args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 	os.makedirs(args.checkpoint_dir, exist_ok=True)
 
 	return args
