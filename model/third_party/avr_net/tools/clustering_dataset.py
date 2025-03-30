@@ -131,7 +131,7 @@ class ClusteringDataset(Dataset):
 		if Path(new_indices_path).exists(): return torch.load(new_indices_path)
 
 		data = []
-		for index in trange(len(self), desc='Balancing dataset'):
+		for index in trange(len(self), desc=f'Balancing dataset for f{self.features_path}'):
 			element = self[index]
 			data.append({
 				'index': 	index,

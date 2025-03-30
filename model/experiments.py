@@ -83,11 +83,6 @@ if __name__=='__main__':
 	# train_features_extraction(disable_pb=True, aligned=False)
 
 
-	# Self attention:
-	# 	Funciones de pérdida dejar SGD.
-	#		Probar Learning rate más bajo.
-	# 	Usar promedio aritmético, pooling layer, convolution y self-attention.
-	# 	Graficar promedio de entrenamiento y validación en una sola gráfica.
 	print('\n\n6- TRAINING AUDIO VISUAL DIARIZATION')
 	train_params = {
 		# Data config
@@ -96,36 +91,39 @@ if __name__=='__main__':
 		'aligned': 								False,
 		'balanced':								True,
 		'checkpoint': 						'',
-		'max_frames': 						60,
+		'max_frames': 						1,
 		'disable_pb': 						False,
-		'db_video_mode': 					'average',	# 'pick_first' 'pick_random' 'keep_all' 'average'
+		'db_video_mode': 					'keep_all',	# 'pick_first' 'pick_random' 'keep_all' 'average'
+		'task':										'train',				# 'train' 'val'
 		# Architecture
 		'self_attention': 				'pick_first', 	# 'class_token' 'pick_first',
 		'self_attention_dropout': 0.2,
 		'cross_attention':	 			'concat', 			# 'fusion' 'concat'
+		'fine_tunning':						False,
 		# Hyperparams
 		'loss_fn':								'mse', 					# 'bce' 'mse'
 		'optimizer':							'sgd', 					# 'sgd' 'adam'
-		'learning_rate': 					0.00001,
-		'momentum': 							0.0,
+		'learning_rate': 					5e-7,
+		'momentum': 							0.9,
 		'weight_decay': 					0.0,
 		'step_size': 							1,
 		'gamma': 									0.99,
-		'epochs': 								50,
+		'epochs': 								10,
+		# 'max_epochs':							10,
 		'frozen_epochs': 					0,
 	}
 
 	print('Starting training with params: ', train_params)
 	train_lightning_avd(**train_params)
 
-	# print('\n\n7- AUDIO VISUAL DIARIZATION')
-	# checkpoints = [
-	# 	'model/third_party/avr_net/checkpoints/lightning_logs/version_796101/checkpoints/epoch=8-step=224100.ckpt'
-	# ]
+	print('\n\n7- AUDIO VISUAL DIARIZATION')
+	checkpoints = [
+		'model/third_party/avr_net/checkpoints/lightning_logs/Reference/checkpoints/epoch=0-step=19637.ckpt'
+	]
 
 	# for checkpoint in checkpoints:
 	# 	print(checkpoint)
-	# 	perform_avd(aligned=False, checkpoint=checkpoint, max_frames=1)
+	# 	perform_avd(aligned=False, checkpoint=checkpoint, max_frames=1, db_video_mode='keep_all')
 	# 	print('')
 
 

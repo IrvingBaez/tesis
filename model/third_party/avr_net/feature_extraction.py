@@ -40,7 +40,7 @@ def extract_features(args, mode):
 		config['video_ids'] = [video_id]
 
 		dataset = CustomDataset(config, training=True, disable_pb=args.disable_pb)
-		dataloader = DataLoader(dataset, batch_size=128, shuffle=False, num_workers=0, pin_memory=True, drop_last=False, collate_fn=CustomCollator())
+		dataloader = DataLoader(dataset, batch_size=64, shuffle=False, num_workers=0, pin_memory=True, drop_last=False, collate_fn=CustomCollator())
 
 		feature_list = []
 		with torch.no_grad():

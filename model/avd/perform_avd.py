@@ -10,12 +10,13 @@ from model.third_party.avr_net.predict import main as avr_net
 
 def perform_avd(args):
 	arguments = {
-		'data_type':	'val',
-		'video_ids':	','.join(args.video_ids),
-		'sys_path': 	args.sys_path,
-		'checkpoint':	args.checkpoint,
-		'aligned':		args.aligned,
-		'max_frames':	args.max_frames
+		'data_type':			'val',
+		'video_ids':			','.join(args.video_ids),
+		'sys_path': 			args.sys_path,
+		'checkpoint':			args.checkpoint,
+		'aligned':				args.aligned,
+		'max_frames':			args.max_frames,
+		'db_video_mode': 	args.db_video_mode
 	}
 
 	avr_net(**arguments)
@@ -42,9 +43,10 @@ def score_avd_validation(args):
 def initialize_arguments(**kwargs):
 	parser = argparse.ArgumentParser(description = "Arguments for data preprocessing")
 
-	parser.add_argument('--checkpoint',	type=str,							help='Checkpoint to evaluate')
-	parser.add_argument('--max_frames',	type=int,							help='How many frames to use in self-attention')
-	parser.add_argument('--aligned', 		action='store_true',	help='Used aligned frame crops')
+	parser.add_argument('--checkpoint',			type=str,							help='Checkpoint to evaluate')
+	parser.add_argument('--max_frames',			type=int,							help='How many frames to use in self-attention')
+	parser.add_argument('--aligned', 				action='store_true',	help='Used aligned frame crops')
+	parser.add_argument('--db_video_mode', 	type=str, 						help='Selection mode for video frames in the dataset')
 
 	args = util.argparse_helper(parser, **kwargs)
 

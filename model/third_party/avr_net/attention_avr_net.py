@@ -26,20 +26,26 @@ class Attention_AVRNet(nn.Module):
 		self.bna.load_state_dict(self.relation_layer.bna.state_dict())
 
 
+	def fine_tunning(self):
+		self.freeze_relation()
+		for param in self.relation_layer.fc.parameters():
+			param.requires_grad = True
+
+
 	def freeze_relation(self):
 		for param in self.relation_layer.parameters():
 			param.requires_grad = False
 
-		# for param in self.bna.parameters():
-		# 	param.requires_grad = False
+		for param in self.bna.parameters():
+			param.requires_grad = False
 
 
 	def unfreeze_relation(self):
 		for param in self.relation_layer.parameters():
 			param.requires_grad = True
 
-		# for param in self.bna.parameters():
-		# 	param.requires_grad = True
+		for param in self.bna.parameters():
+			param.requires_grad = True
 
 
 	def forward(self, video, audio, task):

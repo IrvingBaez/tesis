@@ -26,6 +26,7 @@ def compute_similarity(args):
 	args.train_features_path, args.val_features_path = extract_features(
 		sys_path=args.sys_path,
 		aligned=args.aligned,
+		db_video_mode=args.db_video_mode,
 		max_frames=args.max_frames,
 		disable_pb=args.disable_pb
 	)
@@ -36,7 +37,7 @@ def compute_similarity(args):
 
 	predictions = trainer.predict(model, dataloader)
 	del trainer, model, dataloader
-	
+
 	for video_id in args.video_ids:
 		similarities[video_id] = torch.diag_embed(torch.ones([dataset.utterance_counts[video_id]]))
 
@@ -53,6 +54,7 @@ def compute_similarity(args):
 
 def load_model(args):
 	model = Lightning_Attention_AVRNet.load_from_checkpoint(args.checkpoint)
+	print(f'Model loaded with args: {model.args}')
 	model.eval()
 
 	return model
@@ -80,12 +82,13 @@ def load_data(args, mode, workers, batch_size=256):
 def initialize_arguments(**kwargs):
 	parser = argparse.ArgumentParser(description = "AVR_Net prediction")
 
-	parser.add_argument('--data_type',		type=str,	help='Type of data being processed, test, val or train')
-	parser.add_argument('--video_ids',		type=str,	help='Video ids separated by commas')
-	parser.add_argument('--sys_path',			type=str,	help='Path to the folder where to save all the system outputs')
-	parser.add_argument('--max_frames',		type=int,	help='How many frames to use in self-attention')
-	parser.add_argument('--aligned', 			action='store_true',	help='Used aligned frame crops')
-	parser.add_argument('--disable_pb', 	action='store_true',	help='If true, hides progress bars')
+	parser.add_argument('--data_type',			type=str,	help='Type of data being processed, test, val or train')
+	parser.add_argument('--video_ids',			type=str,	help='Video ids separated by commas')
+	parser.add_argument('--sys_path',				type=str,	help='Path to the folder where to save all the system outputs')
+	parser.add_argument('--max_frames',			type=int,	help='How many frames to use in self-attention')
+	parser.add_argument('--aligned', 				action='store_true',	help='Used aligned frame crops')
+	parser.add_argument('--disable_pb', 		action='store_true',	help='If true, hides progress bars')
+	parser.add_argument('--db_video_mode',	type=str, default='pick_first',	help='Selection mode for video frames in the dataset')
 
 	# MODEL CONFIGURATION
 	parser.add_argument('--checkpoint', 	type=str,	help='Path of checkpoint to load and evaluate')

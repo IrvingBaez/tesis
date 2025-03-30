@@ -40,6 +40,13 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 		self.model = Attention_AVRNet(self.args.self_attention, self.args.cross_attention, dropout=self.args.self_attention_dropout)
 		self.model.freeze_relation()
+
+		if 'fine_tunning' not in self.args:
+			self.args.fine_tunning = False
+
+		if self.args.fine_tunning:
+			self.model.fine_tunning()
+
 		self.metric = BinaryF1Score()
 		self.metric_recall = BinaryRecall()
 		self.metric_precision = BinaryPrecision()
@@ -61,7 +68,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 
 	def on_train_epoch_start(self):
-		if self.current_epoch >= self.args.frozen_epochs:
+		if not self.args.fine_tunning and self.current_epoch >= self.args.frozen_epochs:
 			self.model.unfreeze_relation()
 
 
@@ -162,6 +169,10 @@ def train(args):
 	if args.checkpoint:
 		print(f'Loading checkpoint from: {args.checkpoint}')
 		model = Lightning_Attention_AVRNet.load_from_checkpoint(args.checkpoint)
+
+		model.utterance_counts = args.utterance_counts
+		model.starts = args.starts
+		model.ends = args.ends
 	else:
 		print('Loading default model weights')
 		model = Lightning_Attention_AVRNet(args)
@@ -170,16 +181,18 @@ def train(args):
 		accelerator="gpu", devices=1, strategy="auto", # auto ddp_find_unused_parameters_true ddp
 		default_root_dir=args.checkpoint_dir,
 		min_epochs=args.epochs,
+		max_epochs=args.max_epochs,
 		callbacks=[
-			ModelCheckpoint(monitor="f1_score/val"),
-			EarlyStopping(monitor="f1_score/val", mode="max")
+			ModelCheckpoint(monitor="der/val", mode="min"),
+			EarlyStopping(monitor="der/val", mode="min")
 		],
 	)
 
-	# trainer = pl.Trainer(fast_dev_run=True)
-	# trainer.fit(model, train_dataloaders=train_loader)
-
-	trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+	if args.task == 'train':
+		trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+	elif args.task == 'val':
+		assert args.checkpoint is not None, 'Cannot eval without a given checkpoint'
+		trainer.validate(model=model, dataloaders=val_loader)
 
 
 def create_dataset(args):
@@ -192,7 +205,7 @@ def create_dataset(args):
 	)
 
 	train_loader = load_data(args, mode='train', workers=11, batch_size=128)
-	val_loader = load_data(args, mode='val', workers=2, batch_size=1024)
+	val_loader = load_data(args, mode='val', workers=2, batch_size=512)
 
 	return train_loader, val_loader
 
@@ -238,28 +251,31 @@ def initialize_arguments(**kwargs):
 	parser = argparse.ArgumentParser(description = "Attention AVR-Net training")
 
 	# TRAINING CONFIGURATION
-	parser.add_argument('--learning_rate',					type=float,	default=0.001, 	help='Training base learning rate')
-	parser.add_argument('--momentum',								type=float, default=0.0,		help='Training momentum for SDG optimizer. Ignored if Adam optimizer is selected.')
-	parser.add_argument('--weight_decay',						type=float, default=0.0001,	help='Training weight decay for SDG optimizer')
-	parser.add_argument('--step_size',							type=int, 	default=5,			help='Training stepsize for StepLR scheduler')
-	parser.add_argument('--gamma',									type=float, default=0.5,		help='Training gamma for StepLR scheduler')
-	parser.add_argument('--video_proportion', 			type=float, default=1.0,		help='Percentage of available videos to use in training')
-	parser.add_argument('--val_video_proportion', 	type=float, default=1.0,		help='Percentage of available videos to use in validation')
-	parser.add_argument('--epochs', 								type=int, 	default=10, 		help='Epochs to add to the training of the checkpoint')
-	parser.add_argument('--frozen_epochs', 					type=int, 	default=0, 			help='Epochs to train without updating relation network weights')
-	parser.add_argument('--self_attention', 				type=str, 	default='',			help='Self attention method to marge available frame features')
-	parser.add_argument('--self_attention_dropout', type=float, default=0.1, 		help='Dropout used in self-attention transformer')
-	parser.add_argument('--cross_attention', 				type=str, 	default='', 		help='Cross attention method to marge frame and audio features')
-	parser.add_argument('--loss_fn', 								type=str, 	default='', 		help='Loss function to use during training')
-	parser.add_argument('--optimizer', 							type=str, 	default='', 		help='Optimizer to use during training')
-	parser.add_argument('--disable_pb', 						action='store_true', 				help='If true, hides progress bars')
+	parser.add_argument('--learning_rate',					type=float,	default=0.001, 		help='Training base learning rate')
+	parser.add_argument('--momentum',								type=float, default=0.0,			help='Training momentum for SDG optimizer. Ignored if Adam optimizer is selected.')
+	parser.add_argument('--weight_decay',						type=float, default=0.0001,		help='Training weight decay for SDG optimizer')
+	parser.add_argument('--step_size',							type=int, 	default=5,				help='Training stepsize for StepLR scheduler')
+	parser.add_argument('--gamma',									type=float, default=0.5,			help='Training gamma for StepLR scheduler')
+	parser.add_argument('--video_proportion', 			type=float, default=1.0,			help='Percentage of available videos to use in training')
+	parser.add_argument('--val_video_proportion', 	type=float, default=1.0,			help='Percentage of available videos to use in validation')
+	parser.add_argument('--epochs', 								type=int, 	default=10, 			help='Epochs to add to the training of the checkpoint')
+	parser.add_argument('--max_epochs',							type=int, 	default=None, 		help='Force stop after this many epochs', required=False)
+	parser.add_argument('--frozen_epochs', 					type=int, 	default=0, 				help='Epochs to train without updating relation network weights')
+	parser.add_argument('--self_attention', 				type=str, 	default='',				help='Self attention method to marge available frame features')
+	parser.add_argument('--self_attention_dropout', type=float, default=0.1, 			help='Dropout used in self-attention transformer')
+	parser.add_argument('--cross_attention', 				type=str, 	default='', 			help='Cross attention method to marge frame and audio features')
+	parser.add_argument('--loss_fn', 								type=str, 	default='', 			help='Loss function to use during training')
+	parser.add_argument('--optimizer', 							type=str, 	default='', 			help='Optimizer to use during training')
+	parser.add_argument('--task', 									type=str, 	default='train', 	help='Execution mode, either train or val')
+	parser.add_argument('--disable_pb', 						action='store_true', 					help='If true, hides progress bars')
 	# DATA CONFIGURATION
-	parser.add_argument('--max_frames', 						type=int, 	default=1,			help='How many frames to use in self-attention')
+	parser.add_argument('--max_frames', 						type=int, 	default=1,				help='How many frames to use in self-attention')
 	parser.add_argument('--db_video_mode', 					type=str, 	default='pick_first',	help='Selection mode for video frames in the dataset')
-	parser.add_argument('--aligned', 								action='store_true', 				help='Wether or not to use aligned frames')
-	parser.add_argument('--balanced',								action='store_true', 				help='Balance positives and negatives examples in training data.')
+	parser.add_argument('--aligned', 								action='store_true', 					help='Wether or not to use aligned frames')
+	parser.add_argument('--balanced',								action='store_true', 					help='Balance positives and negatives examples in training data.')
 	# MODEL CONFIGURATION
-	parser.add_argument('--checkpoint', 						type=str,		default=None, 	help='Path of checkpoint to continue training', )
+	parser.add_argument('--checkpoint', 						type=str,		default=None, 		help='Path of checkpoint to continue training.')
+	parser.add_argument('--fine_tunning', 					type=str,		default=None, 		help='Freezes all but the last relation layer.')
 
 	args = argparse_helper(parser, **kwargs)
 
