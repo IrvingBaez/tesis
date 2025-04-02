@@ -275,7 +275,7 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--balanced',								action='store_true', 					help='Balance positives and negatives examples in training data.')
 	# MODEL CONFIGURATION
 	parser.add_argument('--checkpoint', 						type=str,		default=None, 		help='Path of checkpoint to continue training.')
-	parser.add_argument('--fine_tunning', 					type=str,		default=None, 		help='Freezes all but the last relation layer.')
+	parser.add_argument('--fine_tunning', 					action='store_true', 					help='Freezes all but the last relation layer.')
 
 	args = argparse_helper(parser, **kwargs)
 
