@@ -6,6 +6,7 @@ from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader, SequentialSampler
 from pathlib import Path
 import torch.nn.functional as F
+from pytorch_metric_learning import losses
 
 from model.third_party.avr_net.attention_avr_net import Attention_AVRNet
 from model.third_party.avr_net.tools.write_rttms import main as write_rttms
@@ -31,8 +32,10 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 			self.loss_fn = F.binary_cross_entropy
 		elif args.loss_fn == 'mse':
 			self.loss_fn = F.mse_loss
+		elif args.loss_fn == 'contrastive':
+			self.loss_fn = losses.ContrastiveLoss()
 		else:
-			raise ValueError(f"loss_fn must be 'bce' or 'mse' not '{args.loss_fn}'")
+			raise ValueError(f"loss_fn must be 'bce', 'mse' or 'contrastive' not '{args.loss_fn}'")
 
 		self.starts = args.starts if 'starts' in vars(args) else None
 		self.ends = args.ends if 'ends' in vars(args) else None

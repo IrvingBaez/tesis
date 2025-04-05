@@ -93,21 +93,21 @@ if __name__=='__main__':
 		'checkpoint': 						'',
 		'max_frames': 						1,
 		'disable_pb': 						False,
-		'db_video_mode': 					'keep_all',	# 'pick_first' 'pick_random' 'keep_all' 'average'
+		'db_video_mode': 					'keep_all',			# 'pick_first' 'pick_random' 'keep_all' 'average'
 		'task':										'train',				# 'train' 'val'
 		# Architecture
 		'self_attention': 				'pick_first', 	# 'class_token' 'pick_first',
-		'self_attention_dropout': 0.2,
+		'self_attention_dropout': 0.0,
 		'cross_attention':	 			'concat', 			# 'fusion' 'concat'
 		'fine_tunning':						False,
 		# Hyperparams
-		'loss_fn':								'mse', 					# 'bce' 'mse'
+		'loss_fn':								'contrastive', 					# 'bce' 'mse' 'contrastive'
 		'optimizer':							'sgd', 					# 'sgd' 'adam'
-		'learning_rate': 					5e-7,
-		'momentum': 							0.9,
+		'learning_rate': 					2e-6,
+		'momentum': 							0.0,
 		'weight_decay': 					0.0,
 		'step_size': 							1,
-		'gamma': 									0.99,
+		'gamma': 									0.95,
 		'epochs': 								10,
 		# 'max_epochs':							10,
 		'frozen_epochs': 					0,
