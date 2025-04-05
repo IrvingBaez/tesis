@@ -101,14 +101,14 @@ if __name__=='__main__':
 		'cross_attention':	 			'concat', 			# 'fusion' 'concat'
 		'fine_tunning':						False,
 		# Hyperparams
-		'loss_fn':								'contrastive', 					# 'bce' 'mse' 'contrastive'
+		'loss_fn':								'mse', 					# 'bce' 'mse' 'contrastive'
 		'optimizer':							'sgd', 					# 'sgd' 'adam'
-		'learning_rate': 					2e-6,
+		'learning_rate': 					0.0,
 		'momentum': 							0.0,
 		'weight_decay': 					0.0,
 		'step_size': 							1,
 		'gamma': 									0.95,
-		'epochs': 								10,
+		'epochs': 								3,
 		# 'max_epochs':							10,
 		'frozen_epochs': 					0,
 	}

@@ -28,6 +28,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		self.args = args
 		self.save_hyperparameters()
 
+		print(f'Using loss_fn: {args.loss_fn}')
 		if args.loss_fn == 'bce':
 			self.loss_fn = F.binary_cross_entropy
 		elif args.loss_fn == 'mse':
@@ -77,11 +78,16 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 	def training_step(self, batch, batch_idx):
 		video, audio, task_full, target = batch['video'], batch['audio'], batch['task_full'], batch['target']
-		output = self.model(video, audio, task_full)
+		scores = self.model(video, audio, task_full)
 
-		loss = self.loss_fn(output, target)
-		accuracy = ((output > 0.5) == target).float().mean()
-		fscore = self.metric(output, target)
+		if self.args.loss_fn == 'contrastive':
+			loss_target = target.reshape(-1)
+			loss = self.loss_fn(scores, loss_target)
+		else:
+			loss = self.loss_fn(scores, target)
+
+		accuracy = ((scores > 0.5) == target).float().mean()
+		fscore = self.metric(scores, target)
 
 		self.log("loss/train", 			loss, 			sync_dist=True, on_step=True)
 		self.log("acc/train", 			accuracy, 	sync_dist=True, on_step=True)
@@ -98,7 +104,12 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		video, audio, task_full, target = batch['video'], batch['audio'], batch['task_full'], batch['target']
 		scores = self.model(video, audio, task_full)
 
-		loss = 			self.loss_fn(scores, target)
+		if self.args.loss_fn == 'contrastive':
+			loss_target = target.reshape(-1)
+			loss = self.loss_fn(scores, loss_target)
+		else:
+			loss = self.loss_fn(scores, target)
+
 		accuracy = 	((scores > 0.5) == target).float().mean()
 		fscore = 		self.metric(scores, target)
 		recall = 		self.metric_recall(scores, target)
