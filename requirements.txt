@@ -104,6 +104,7 @@ pyparsing==3.1.2
 PySocks==1.7.1
 python_speech_features==0.6
 pytorch-lightning==2.2.4
+pytorch-metric-learning==2.8.1
 pytz==2024.1
 PyYAML==6.0.1
 referencing==0.35.1
