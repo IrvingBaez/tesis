@@ -90,7 +90,7 @@ if __name__=='__main__':
 		'val_video_proportion':		1.0,
 		'aligned': 								False,
 		'balanced':								True,
-		'checkpoint': 						'',
+		'checkpoint': 						'model/third_party/avr_net/checkpoints/lightning_logs/version_797537/checkpoints/epoch=0-step=24900.ckpt',
 		'max_frames': 						1,
 		'disable_pb': 						False,
 		'db_video_mode': 					'keep_all',			# 'pick_first' 'pick_random' 'keep_all' 'average'
@@ -103,12 +103,12 @@ if __name__=='__main__':
 		# Hyperparams
 		'loss_fn':								'mse', 					# 'bce' 'mse' 'contrastive'
 		'optimizer':							'sgd', 					# 'sgd' 'adam'
-		'learning_rate': 					0.0,
+		'learning_rate': 					5e-7,
 		'momentum': 							0.0,
 		'weight_decay': 					0.0,
 		'step_size': 							1,
 		'gamma': 									0.95,
-		'epochs': 								3,
+		'epochs': 								100,
 		# 'max_epochs':							10,
 		'frozen_epochs': 					0,
 	}

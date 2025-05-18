@@ -5,7 +5,7 @@
 #SBATCH --mem=50G														# RAM requested
 #SBATCH --gpus=4 														# Number of gpus requested
 #SBATCH --partition=gpu 										# Queue
-#SBATCH --exclude=c04,c18,c19								# Avoid these nodes
+#SBATCH --exclude=c04,c18,c19,c20						# Avoid these nodes
 #SBATCH --mail-user="irvingbaezc@gmail.com"	# Email for reporting
 #SBATCH --mail-type=ALL 										# Report types
 

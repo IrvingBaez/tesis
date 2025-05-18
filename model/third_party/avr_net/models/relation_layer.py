@@ -16,6 +16,8 @@ class RelationLayer(nn.Module):
 		self.num_filters	= [256, 64]
 		self.inplanes = (256 + 512) * 2
 		self.bna = nn.BatchNorm2d(256)
+
+		# Relation Network
 		self.layer1 = self._make_layer(Bottleneck, self.num_filters[0], self.layers[0], stride=2)
 		self.layer2 = self._make_layer(Bottleneck, self.num_filters[1], self.layers[1], stride=2)
 		self.fc = nn.Sequential(

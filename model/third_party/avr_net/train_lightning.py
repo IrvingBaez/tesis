@@ -34,7 +34,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		elif args.loss_fn == 'mse':
 			self.loss_fn = F.mse_loss
 		elif args.loss_fn == 'contrastive':
-			self.loss_fn = losses.ContrastiveLoss()
+			self.loss_fn = losses.ContrastiveLoss(pos_margin=0.9, neg_margin=0.1)
 		else:
 			raise ValueError(f"loss_fn must be 'bce', 'mse' or 'contrastive' not '{args.loss_fn}'")
 
@@ -59,6 +59,8 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 
 	def configure_optimizers(self):
+		print(f"CONFIGURING OPTIMIZER WITH LR: {self.args.learning_rate}")
+		
 		if self.args.optimizer == 'sgd':
 			optimizer = torch.optim.SGD(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay, momentum=self.args.momentum)
 		elif self.args.optimizer == 'adam':
@@ -183,6 +185,11 @@ def train(args):
 	if args.checkpoint:
 		print(f'Loading checkpoint from: {args.checkpoint}')
 		model = Lightning_Attention_AVRNet.load_from_checkpoint(args.checkpoint)
+		model.args = args
+		model.configure_optimizers()
+
+		for param in model.parameters():
+			param.requires_grad = True
 
 		model.utterance_counts = args.utterance_counts
 		model.starts = args.starts
