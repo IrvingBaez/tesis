@@ -97,20 +97,20 @@ if __name__=='__main__':
 		'task':										'train',				# 'train' 'val'
 		# Architecture
 		'self_attention': 				'pick_first', 	# 'class_token' 'pick_first',
-		'self_attention_dropout': 0.0,
+		'self_attention_dropout': 0.2,
 		'cross_attention':	 			'concat', 			# 'fusion' 'concat'
 		'fine_tunning':						False,
 		# Hyperparams
 		'loss_fn':								'mse', 					# 'bce' 'mse' 'contrastive'
 		'optimizer':							'sgd', 					# 'sgd' 'adam'
-		'learning_rate': 					5e-7,
+		'learning_rate': 					1e-5,
 		'momentum': 							0.0,
 		'weight_decay': 					0.0,
 		'step_size': 							1,
-		'gamma': 									0.95,
+		'gamma': 									0.99,
 		'epochs': 								100,
 		# 'max_epochs':							10,
-		'frozen_epochs': 					0,
+		'frozen_epochs': 					50,
 	}
 
 	print('Starting training with params: ', train_params)

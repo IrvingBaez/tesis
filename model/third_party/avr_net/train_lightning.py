@@ -60,7 +60,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 	def configure_optimizers(self):
 		print(f"CONFIGURING OPTIMIZER WITH LR: {self.args.learning_rate}")
-		
+
 		if self.args.optimizer == 'sgd':
 			optimizer = torch.optim.SGD(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay, momentum=self.args.momentum)
 		elif self.args.optimizer == 'adam':
@@ -185,6 +185,9 @@ def train(args):
 	if args.checkpoint:
 		print(f'Loading checkpoint from: {args.checkpoint}')
 		model = Lightning_Attention_AVRNet.load_from_checkpoint(args.checkpoint)
+		state_dict = torch.load(args.checkpoint)['state_dict']
+		model.load_state_dict(state_dict)
+
 		model.args = args
 		model.configure_optimizers()
 
