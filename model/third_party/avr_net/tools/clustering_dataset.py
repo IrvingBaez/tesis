@@ -21,6 +21,7 @@ class ClusteringDataset(Dataset):
 
 		self.features_path = features_path
 		self.balanced = balanced
+		self.video_proportion = video_proportion
 		self.video_ids = sorted([os.path.basename(filepath).split('.')[0] for filepath in glob(f'{self.features_path}/*.pckl')])
 
 		assert 0.0 < video_proportion <= 1.0, 'Video proportion must be in the interval (0,1]'
@@ -127,7 +128,7 @@ class ClusteringDataset(Dataset):
 
 
 	def _balance(self):
-		new_indices_path = f'{self.features_path}/balanced_indices.pth'
+		new_indices_path = f'{self.features_path}/balanced_indices_{self.video_proportion * 100:0.0f}_%.pth'
 		if Path(new_indices_path).exists(): return torch.load(new_indices_path)
 
 		data = []

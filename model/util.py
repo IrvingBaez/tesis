@@ -61,6 +61,7 @@ def intersection_over_union(boxA, boxB, relativeToBoxA=False):
 def argparse_helper(parser, **kwargs):
 	if kwargs:
 		args_list = []
+		booleans = []
 
 		for key, value in kwargs.items():
 			if key == 'not_empty': continue
@@ -68,8 +69,8 @@ def argparse_helper(parser, **kwargs):
 			args_list.append(f'--{key}')
 
 			if isinstance(value, bool):
-				if not value:
-					args_list.pop()
+				booleans.append((key, value))
+				args_list.pop()
 				continue
 
 			if isinstance(value, str):
@@ -84,6 +85,9 @@ def argparse_helper(parser, **kwargs):
 		args_list = None
 
 	args = parser.parse_args(args=args_list)
+
+	for key, value in booleans:
+		setattr(args, key, value)
 
 	return args
 

@@ -84,13 +84,14 @@ if __name__=='__main__':
 
 
 	print('\n\n6- TRAINING AUDIO VISUAL DIARIZATION')
+	# TODO: Test with video proportion <1 and no balancing
 	train_params = {
 		# Data config
-		'video_proportion': 			1.0,
-		'val_video_proportion':		1.0,
+		'video_proportion': 			0.1,
+		'val_video_proportion':		0.1,
 		'aligned': 								False,
 		'balanced':								True,
-		'checkpoint': 						'model/third_party/avr_net/checkpoints/lightning_logs/version_797537/checkpoints/epoch=0-step=24900.ckpt',
+		'checkpoint': 						'model/third_party/avr_net/checkpoints/lightning_logs/version_1126077/checkpoints/epoch=5-step=416688.ckpt',
 		'max_frames': 						1,
 		'disable_pb': 						False,
 		'db_video_mode': 					'keep_all',			# 'pick_first' 'pick_random' 'keep_all' 'average'
@@ -102,15 +103,16 @@ if __name__=='__main__':
 		'fine_tunning':						False,
 		# Hyperparams
 		'loss_fn':								'mse', 					# 'bce' 'mse' 'contrastive'
+		'add_contrastive':				False,
 		'optimizer':							'sgd', 					# 'sgd' 'adam'
-		'learning_rate': 					1e-5,
+		'learning_rate': 					1e-7,
 		'momentum': 							0.0,
 		'weight_decay': 					0.0,
 		'step_size': 							1,
 		'gamma': 									0.99,
 		'epochs': 								100,
 		# 'max_epochs':							10,
-		'frozen_epochs': 					50,
+		'frozen_epochs': 					0,
 	}
 
 	print('Starting training with params: ', train_params)
