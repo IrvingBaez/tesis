@@ -7,7 +7,6 @@ from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader, SequentialSampler
 from pathlib import Path
 import torch.nn.functional as F
-from pytorch_metric_learning.losses import ContrastiveLoss
 
 from model.third_party.avr_net.attention_avr_net import Attention_AVRNet
 from model.third_party.avr_net.tools.write_rttms import main as write_rttms
@@ -16,6 +15,7 @@ from model.util import argparse_helper, get_path, save_data
 from .feature_extraction import main as extract_features
 from .tools.clustering_dataset import ClusteringDataset
 from .tools.custom_collator import CustomCollator
+from .tools.contrastive_loss import ContrastiveLoss
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -41,7 +41,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 		if args.add_contrastive:
 			# TODO: Set good margins.
-			self.contrastive_loss_fn = ContrastiveLoss(pos_margin=0.9, neg_margin=0.1)
+			self.contrastive_loss_fn = ContrastiveLoss(margin=0.9)
 
 		self.starts = args.starts if 'starts' in vars(args) else None
 		self.ends = args.ends if 'ends' in vars(args) else None
@@ -90,8 +90,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		loss = self.loss_fn(scores, target)
 
 		if self.args.add_contrastive:
-			# TODO: Use feats_a and feats_b
-			loss += self.contrastive_loss_fn()
+			loss += self.contrastive_loss_fn(feats_a, feats_b, target)
 
 		accuracy = ((scores > 0.5) == target).float().mean()
 		fscore = self.metric(scores, target)
@@ -114,8 +113,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		loss = self.loss_fn(scores, target)
 
 		if self.args.add_contrastive:
-			# TODO: Use feats_a and feats_b
-			loss += self.contrastive_loss_fn()
+			loss += self.contrastive_loss_fn(feats_a, feats_b, target)
 
 		accuracy = 	((scores > 0.5) == target).float().mean()
 		fscore = 		self.metric(scores, target)
@@ -235,14 +233,14 @@ def initialize_arguments(**kwargs):
 		'max_frames':		args.max_frames
 	}
 
-	assert Path(args.train_dataset_config['waves_path']).exists()
-	assert Path(args.train_dataset_config['rttms_path']).exists()
-	assert Path(args.train_dataset_config['labs_path']).exists()
-	assert Path(args.train_dataset_config['frames_path']).exists()
-	assert Path(args.val_dataset_config['waves_path']).exists()
-	assert Path(args.val_dataset_config['rttms_path']).exists()
-	assert Path(args.val_dataset_config['labs_path']).exists()
-	assert Path(args.val_dataset_config['frames_path']).exists()
+	assert Path(args.train_dataset_config['waves_path']).exists(), 	f'Data path {args.train_dataset_config['waves_path']} does not exist.'
+	assert Path(args.train_dataset_config['rttms_path']).exists(), 	f'Data path {args.train_dataset_config['rttms_path']} does not exist.'
+	assert Path(args.train_dataset_config['labs_path']).exists(), 	f'Data path {args.train_dataset_config['labs_path']} does not exist.'
+	assert Path(args.train_dataset_config['frames_path']).exists(), f'Data path {args.train_dataset_config['frames_path']} does not exist.'
+	assert Path(args.val_dataset_config['waves_path']).exists(), 		f'Data path {args.val_dataset_config['waves_path']} does not exist.'
+	assert Path(args.val_dataset_config['rttms_path']).exists(), 		f'Data path {args.val_dataset_config['rttms_path']} does not exist.'
+	assert Path(args.val_dataset_config['labs_path']).exists(), 		f'Data path {args.val_dataset_config['labs_path']} does not exist.'
+	assert Path(args.val_dataset_config['frames_path']).exists(), 	f'Data path {args.val_dataset_config['frames_path']} does not exist.'
 
 	args.sys_path 			= 'model/third_party/avr_net/features'
 	args.checkpoint_dir = f'model/third_party/avr_net/checkpoints/'

@@ -103,7 +103,7 @@ if __name__=='__main__':
 		'fine_tunning':						False,
 		# Hyperparams
 		'loss_fn':								'mse', 					# 'bce' 'mse' 'contrastive'
-		'add_contrastive':				False,
+		'add_contrastive':				True,
 		'optimizer':							'sgd', 					# 'sgd' 'adam'
 		'learning_rate': 					1e-7,
 		'momentum': 							0.0,
