@@ -33,15 +33,10 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 			self.loss_fn = F.binary_cross_entropy
 		elif args.loss_fn == 'mse':
 			self.loss_fn = F.mse_loss
+		elif args.loss_fn == 'contrastive':
+			self.loss_fn = ContrastiveLoss(margin=0.9)
 		else:
-			raise ValueError(f"loss_fn must be 'bce' or 'mse' not '{args.loss_fn}'")
-
-		if 'add_contrastive' not in self.args:
-			self.args.fine_tunning = False
-
-		if args.add_contrastive:
-			# TODO: Set good margins.
-			self.contrastive_loss_fn = ContrastiveLoss(margin=0.9)
+			raise ValueError(f"loss_fn must be 'bce', 'mse' or 'contrastive' not '{args.loss_fn}'")
 
 		self.starts = args.starts if 'starts' in vars(args) else None
 		self.ends = args.ends if 'ends' in vars(args) else None
@@ -85,12 +80,9 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 	def training_step(self, batch, batch_idx):
 		video, audio, task_full, target = batch['video'], batch['audio'], batch['task_full'], batch['target']
-		feats_a, feats_b, scores = self.model(video, audio, task_full)
+		scores = self.model(video, audio, task_full)
 
 		loss = self.loss_fn(scores, target)
-
-		if self.args.add_contrastive:
-			loss += self.contrastive_loss_fn(feats_a, feats_b, target)
 
 		accuracy = ((scores > 0.5) == target).float().mean()
 		fscore = self.metric(scores, target)
@@ -108,12 +100,9 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 	def validation_step(self, batch, batch_idx):
 		video, audio, task_full, target = batch['video'], batch['audio'], batch['task_full'], batch['target']
-		feats_a, feats_b, scores = self.model(video, audio, task_full)
+		scores = self.model(video, audio, task_full)
 
 		loss = self.loss_fn(scores, target)
-
-		if self.args.add_contrastive:
-			loss += self.contrastive_loss_fn(feats_a, feats_b, target)
 
 		accuracy = 	((scores > 0.5) == target).float().mean()
 		fscore = 		self.metric(scores, target)
@@ -193,7 +182,6 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--self_attention_dropout', type=float, default=0.1, 			help='Dropout used in self-attention transformer')
 	parser.add_argument('--cross_attention', 				type=str, 	default='', 			help='Cross attention method to marge frame and audio features')
 	parser.add_argument('--loss_fn', 								type=str, 	default='', 			help='Loss function to use during training')
-	parser.add_argument('--add_contrastive', 				action='store_true', 					help='Adds the contrastive loss of the features to the Loss function')
 	parser.add_argument('--optimizer', 							type=str, 	default='', 			help='Optimizer to use during training')
 	parser.add_argument('--task', 									type=str, 	default='train', 	help='Execution mode, either train or val')
 	parser.add_argument('--disable_pb', 						action='store_true', 					help='If true, hides progress bars')

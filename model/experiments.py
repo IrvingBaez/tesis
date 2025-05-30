@@ -102,10 +102,9 @@ if __name__=='__main__':
 		'cross_attention':	 			'concat', 			# 'fusion' 'concat'
 		'fine_tunning':						False,
 		# Hyperparams
-		'loss_fn':								'mse', 					# 'bce' 'mse' 'contrastive'
-		'add_contrastive':				True,
+		'loss_fn':								'contrastive', 					# 'bce' 'mse' 'contrastive'
 		'optimizer':							'sgd', 					# 'sgd' 'adam'
-		'learning_rate': 					1e-7,
+		'learning_rate': 					1e-6,
 		'momentum': 							0.0,
 		'weight_decay': 					0.0,
 		'step_size': 							1,

@@ -8,18 +8,7 @@ class ContrastiveLoss(nn.Module):
 		self.margin = margin
 
 
-	def forward(self, x_1, x_2, y):
-		B, C, F, H, W = x_1.shape
-
-		x_1 = x_1.reshape(B, C, F, H*W)
-		x_2 = x_2.reshape(B, C, F, H*W)
-		x_1 = normalize(x_1)
-		x_2 = normalize(x_2)
-
-		# TODO: Is this the correct way to calculate distance?
-		distance = torch.linalg.matrix_norm((x_1-x_2))
-		distance /= torch.max(distance)
-
+	def forward(self, distance, y):
 		margins = self.margin * torch.ones(distance.shape, device=distance.device)
 		ones = torch.ones(y.shape, device=y.device)
 
@@ -33,11 +22,3 @@ class ContrastiveLoss(nn.Module):
 		loss = torch.mean(neg + pos)
 
 		return loss
-
-
-# Set mean=0, s=1
-def normalize(tensor):
-	mean = tensor.mean(dim=[0,2,3], keepdim=True)
-	std = tensor.std(dim=[0,2,3], keepdim=True)
-
-	return (tensor - mean) / std

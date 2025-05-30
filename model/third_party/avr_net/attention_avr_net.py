@@ -75,4 +75,4 @@ class Attention_AVRNet(nn.Module):
 
 		scores = self.relation_layer(feats, task)
 
-		return feats_a, feats_b, scores
+		return scores
