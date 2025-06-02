@@ -103,6 +103,8 @@ if __name__=='__main__':
 		'fine_tunning':						False,
 		# Hyperparams
 		'loss_fn':								'contrastive', 					# 'bce' 'mse' 'contrastive'
+		'pos_margin':							0.2,
+		'neg_margin':							0.95,
 		'optimizer':							'sgd', 					# 'sgd' 'adam'
 		'learning_rate': 					1e-6,
 		'momentum': 							0.0,
