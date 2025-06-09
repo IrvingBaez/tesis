@@ -1,6 +1,7 @@
 import argparse
 import copy
 import os
+import shutil
 import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import StepLR
@@ -38,10 +39,6 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		else:
 			raise ValueError(f"loss_fn must be 'bce', 'mse' or 'contrastive' not '{args.loss_fn}'")
 
-		self.starts = args.starts if 'starts' in vars(args) else None
-		self.ends = args.ends if 'ends' in vars(args) else None
-		self.utterance_counts = args.utterance_counts if 'utterance_counts' in vars(args) else None
-
 		self.model = Attention_AVRNet(self.args.self_attention, self.args.cross_attention, dropout=self.args.self_attention_dropout)
 		self.model.freeze_relation()
 
@@ -55,6 +52,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		self.metric_recall = BinaryRecall()
 		self.metric_precision = BinaryPrecision()
 
+		self.train_predictions = None
 		self.validation_predictions = None
 
 
@@ -74,6 +72,8 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 
 	def on_train_epoch_start(self):
+		self.train_predictions = []
+
 		if not self.args.fine_tunning and self.current_epoch >= self.args.frozen_epochs:
 			self.model.unfreeze_relation()
 
@@ -91,7 +91,43 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		self.log("acc/train", 			accuracy, 	sync_dist=True, on_step=True)
 		self.log("f1_score/train", 	fscore, 		sync_dist=True, on_step=True)
 
+		for video_id, index_a, index_b, score in zip(batch['video_id'], batch['index_a'], batch['index_b'], scores):
+			self.train_predictions.append((video_id, index_a, index_b, score.cpu()))
+
 		return loss
+
+
+	def on_train_epoch_end(self):
+		similarities = {}
+
+		for video_id in self.args.train_utterance_counts.keys():
+			similarities[video_id] = torch.diag_embed(torch.ones([self.args.train_utterance_counts[video_id]]))
+
+		for prediction in self.validation_predictions:
+			video_id, index_a, index_b, score = prediction
+
+			similarities[video_id][index_a, index_b] = score
+			similarities[video_id][index_b, index_a] = score
+
+		self.validation_predictions = None
+
+		similarities_path = f'{self.logger.log_dir}/similarities.pth'
+		sys_path = f'{self.logger.log_dir}/rttms'
+
+		similarity_data = {'similarities': similarities, 'starts': self.args.train_starts, 'ends': self.args.train_ends}
+		save_data(similarity_data, similarities_path, verbose=True, override=True)
+		write_rttms(similarities_path=similarities_path, sys_path=sys_path, data_type='train')
+
+		score_avd(data_type='val', sys_path=f'{sys_path}/val.out', output_path=f'{sys_path}/val_scores.out')
+
+		with open(f'{sys_path}/val_scores.out', 'r') as file:
+			scores = file.read()
+
+		last_line = scores.split('\n')[-1]
+		der = float(last_line.split()[3])
+
+		self.log("der/train", der, 	sync_dist=True)
+		shutil.rmtree(sys_path)
 
 
 	def on_validation_epoch_start(self):
@@ -125,8 +161,8 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 	def on_validation_epoch_end(self):
 		similarities = {}
 
-		for video_id in self.utterance_counts.keys():
-			similarities[video_id] = torch.diag_embed(torch.ones([self.utterance_counts[video_id]]))
+		for video_id in self.args.val_utterance_counts.keys():
+			similarities[video_id] = torch.diag_embed(torch.ones([self.args.val_utterance_counts[video_id]]))
 
 		for prediction in self.validation_predictions:
 			video_id, index_a, index_b, score = prediction
@@ -139,7 +175,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		similarities_path = f'{self.logger.log_dir}/similarities.pth'
 		sys_path = f'{self.logger.log_dir}/rttms'
 
-		similarity_data = {'similarities': similarities, 'starts': self.starts, 'ends': self.ends}
+		similarity_data = {'similarities': similarities, 'starts': self.args.val_starts, 'ends': self.args.val_ends}
 		save_data(similarity_data, similarities_path, verbose=True, override=True)
 		write_rttms(similarities_path=similarities_path, sys_path=sys_path, data_type='val')
 
@@ -152,6 +188,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		der = float(last_line.split()[3])
 
 		self.log("der/val", der, 	sync_dist=True)
+		shutil.rmtree(sys_path)
 
 
 	def predict_step(self, batch, batch_idx, dataloader_idx=0):
@@ -246,9 +283,13 @@ def train(args):
 
 	train_loader, val_loader = create_dataset(args)
 
-	args.utterance_counts = val_loader.dataset.utterance_counts
-	args.starts = val_loader.dataset.starts()
-	args.ends = val_loader.dataset.ends()
+	args.val_utterance_counts = val_loader.dataset.utterance_counts
+	args.val_starts = val_loader.dataset.starts()
+	args.val_ends = val_loader.dataset.ends()
+
+	args.train_utterance_counts = train_loader.dataset.utterance_counts
+	args.train_starts = train_loader.dataset.starts()
+	args.train_ends = train_loader.dataset.ends()
 
 	# TODO: Move to load_model
 	if args.checkpoint:
@@ -279,7 +320,7 @@ def train(args):
 
 
 def clean_up_args(args):
-		allowed_args = ['loss_fn', 'add_contrastive', 'starts', 'ends', 'utterance_counts', 'self_attention', 'cross_attention', 'self_attention_dropout', 'fine_tunning', 'learning_rate', 'weight_decay', 'momentum', 'optimizer', 'step_size', 'gamma', 'frozen_epochs', 'pos_margin', 'neg_margin']
+		allowed_args = ['loss_fn', 'add_contrastive', 'val_starts', 'val_ends', 'val_utterance_counts', 'train_starts', 'train_ends', 'train_utterance_counts', 'self_attention', 'cross_attention', 'self_attention_dropout', 'fine_tunning', 'learning_rate', 'weight_decay', 'momentum', 'optimizer', 'step_size', 'gamma', 'frozen_epochs', 'pos_margin', 'neg_margin']
 		current_args = [key for key in args.__dict__.keys()]
 
 		args_copy = copy.deepcopy(args)
@@ -287,6 +328,12 @@ def clean_up_args(args):
 		for key in current_args:
 			if key not in allowed_args:
 				args_copy.__dict__.pop(key)
+
+		not_empty = ['val_starts', 'val_ends', 'val_utterance_counts', 'train_starts', 'train_ends', 'train_utterance_counts']
+
+		for element in not_empty:
+			if element not in args_copy.__dict__.keys():
+				args_copy.__dict__[element] = None
 
 		return args_copy
 

@@ -87,10 +87,10 @@ if __name__=='__main__':
 	# TODO: Test with video proportion <1 and no balancing
 	train_params = {
 		# Data config
-		'video_proportion': 			0.1,
-		'val_video_proportion':		0.1,
+		'video_proportion': 			1.0,
+		'val_video_proportion':		1.0,
 		'aligned': 								False,
-		'balanced':								True,
+		'balanced':								False,
 		'checkpoint': 						'model/third_party/avr_net/checkpoints/lightning_logs/version_1126077/checkpoints/epoch=5-step=416688.ckpt',
 		'max_frames': 						1,
 		'disable_pb': 						False,
