@@ -25,4 +25,3 @@ __pycache__/
 *.py[cod]
 *.ipynb
 .ipynb_checkpoints
-.vscode
