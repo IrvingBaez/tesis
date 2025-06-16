@@ -92,9 +92,9 @@ if __name__=='__main__':
 		'aligned': 								False,
 		'balanced':								False,
 		'checkpoint': 						'model/third_party/avr_net/checkpoints/lightning_logs/version_1126077/checkpoints/epoch=5-step=416688.ckpt',
-		'max_frames': 						1,
+		'max_frames': 						60,
 		'disable_pb': 						False,
-		'db_video_mode': 					'keep_all',			# 'pick_first' 'pick_random' 'keep_all' 'average'
+		'db_video_mode': 					'average',			# 'pick_first' 'pick_random' 'keep_all' 'average'
 		'task':										'train',				# 'train' 'val'
 		# Architecture
 		'self_attention': 				'pick_first', 	# 'class_token' 'pick_first',
@@ -103,12 +103,12 @@ if __name__=='__main__':
 		'fine_tunning':						False,
 		# Hyperparams
 		'loss_fn':								'contrastive', 					# 'bce' 'mse' 'contrastive'
-		'pos_margin':							0.2,
-		'neg_margin':							0.95,
+		'pos_margin':							0.45,
+		'neg_margin':							0.99,
 		'optimizer':							'sgd', 					# 'sgd' 'adam'
-		'learning_rate': 					1e-6,
+		'learning_rate': 					1e-5,
 		'momentum': 							0.0,
-		'weight_decay': 					0.0,
+		'weight_decay': 					5e-5,
 		'step_size': 							1,
 		'gamma': 									0.99,
 		'epochs': 								100,

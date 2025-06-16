@@ -95,7 +95,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		self.log("f1_score/train", 	fscore, 		sync_dist=True, on_step=True)
 
 		for video_id, index_a, index_b, score in zip(batch['video_id'], batch['index_a'], batch['index_b'], scores):
-			self.train_predictions.append((video_id, index_a, index_b, score.cpu()))
+			self.train_predictions.append((video_id, index_a, index_b, score.detach().cpu()))
 
 		return loss
 
@@ -106,13 +106,13 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		for video_id in self.args.train_utterance_counts.keys():
 			similarities[video_id] = torch.diag_embed(torch.ones([self.args.train_utterance_counts[video_id]]))
 
-		for prediction in self.validation_predictions:
+		for prediction in self.train_predictions:
 			video_id, index_a, index_b, score = prediction
 
 			similarities[video_id][index_a, index_b] = score
 			similarities[video_id][index_b, index_a] = score
 
-		self.validation_predictions = None
+		self.train_predictions = None
 
 		similarities_path = f'{self.logger.log_dir}/similarities.pth'
 		sys_path = f'{self.logger.log_dir}/rttms'
@@ -121,9 +121,9 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		save_data(similarity_data, similarities_path, verbose=True, override=True)
 		write_rttms(similarities_path=similarities_path, sys_path=sys_path, data_type='train')
 
-		score_avd(data_type='val', sys_path=f'{sys_path}/val.out', output_path=f'{sys_path}/val_scores.out')
+		score_avd(data_type='train', sys_path=f'{sys_path}/train.out', output_path=f'{sys_path}/train_scores.out')
 
-		with open(f'{sys_path}/val_scores.out', 'r') as file:
+		with open(f'{sys_path}/train_scores.out', 'r') as file:
 			scores = file.read()
 
 		last_line = scores.split('\n')[-1]
@@ -157,7 +157,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		self.log("precision/val", precision, 	sync_dist=True)
 
 		for video_id, index_a, index_b, score in zip(batch['video_id'], batch['index_a'], batch['index_b'], scores):
-			self.validation_predictions.append((video_id, index_a, index_b, score.cpu()))
+			self.validation_predictions.append((video_id, index_a, index_b, score.detach().cpu()))
 
 		return loss
 

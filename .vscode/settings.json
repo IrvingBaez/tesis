@@ -1,0 +1,9 @@
+{
+  "files.exclude" : {
+		"model/third_party/dihard18/": 		true,
+		"model/third_party/dscore/": 			true,
+		"model/third_party/light_asd/": 	true,
+		"model/third_party/RetinaFace/": 	true,
+		"model/third_party/TalkNet/": 		true,
+	}
+}
