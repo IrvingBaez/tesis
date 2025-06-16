@@ -1,13 +1,14 @@
 import argparse
 import copy
+import numpy as np
 import os
 import shutil
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader, SequentialSampler
 from pathlib import Path
-import torch.nn.functional as F
 
 from model.third_party.avr_net.attention_avr_net import Attention_AVRNet
 from model.third_party.avr_net.tools.write_rttms import main as write_rttms
@@ -49,6 +50,9 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 			self.model.fine_tunning()
 
 		self.cos = nn.CosineSimilarity()
+		self.train_cos_stats = {'video': [], 'audio': [], 'target': []}
+		self.val_cos_stats = {'video': [], 'audio': [], 'target': []}
+
 		self.metric = BinaryF1Score()
 		self.metric_recall = BinaryRecall()
 		self.metric_precision = BinaryPrecision()
@@ -74,6 +78,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 	def on_train_epoch_start(self):
 		self.train_predictions = []
+		self.train_cos_stats = {'video': [], 'audio': [], 'target': []}
 
 		if not self.args.fine_tunning and self.current_epoch >= self.args.frozen_epochs:
 			self.model.unfreeze_relation()
@@ -88,7 +93,8 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		accuracy = ((scores > 0.5) == target).float().mean()
 		fscore = self.metric(scores, target)
 
-		self.cosine_stats(video, audio, target, mode='train')
+		self.train_cos_stats = self.cos_batch_stats(video, audio, target, self.train_cos_stats)
+		# self.cosine_stats(video, audio, target, mode='train')
 
 		self.log("loss/train", 			loss, 			sync_dist=True, on_step=True)
 		self.log("acc/train", 			accuracy, 	sync_dist=True, on_step=True)
@@ -101,6 +107,8 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 
 	def on_train_epoch_end(self):
+		self.write_cos_stats(self.train_cos_stats, 'train')
+
 		similarities = {}
 
 		for video_id in self.args.train_utterance_counts.keys():
@@ -135,6 +143,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 	def on_validation_epoch_start(self):
 		self.validation_predictions = []
+		self.val_cos_stats = {'video': [], 'audio': [], 'target': []}
 
 
 	def validation_step(self, batch, batch_idx):
@@ -148,7 +157,8 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		recall = 		self.metric_recall(scores, target)
 		precision = self.metric_precision(scores, target)
 
-		self.cosine_stats(video, audio, target, mode='val')
+		self.val_cos_stats = self.cos_batch_stats(video, audio, target, self.val_cos_stats)
+		# self.cosine_stats(video, audio, target, mode='val')
 
 		self.log("loss/val", 			loss, 			sync_dist=True)
 		self.log("acc/val", 			accuracy, 	sync_dist=True)
@@ -164,6 +174,8 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 	# Calculate DER as part of validation end
 	def on_validation_epoch_end(self):
+		self.write_cos_stats(self.val_cos_stats, 'val')
+
 		similarities = {}
 
 		for video_id in self.args.val_utterance_counts.keys():
@@ -206,28 +218,40 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		return predictions
 
 
-	def cosine_stats(self, video, audio, target, mode):
+	def cos_batch_stats(self, video, audio, target, data_dict):
 		B = video.shape[0]
 		target = target.reshape(B)
 
 		video_a, video_b = video[:,0,...].reshape(B, 512*49), video[:,1,...].reshape(B, 512*49)
 		video_cos = self.cos(video_a, video_b)
-		pos_vid_cos = video_cos[target.nonzero()]
-		neg_vid_cos = video_cos[(1-target).nonzero()]
+		data_dict['video'].extend(video_cos.tolist())
 
 		audio_a, audio_b = audio[:,0,...].reshape(B, 256*49), audio[:,1,...].reshape(B, 256*49)
 		audio_cos = self.cos(audio_a, audio_b)
-		pos_aud_cos = audio_cos[target.nonzero()]
-		neg_aud_cos = audio_cos[(1-target).nonzero()]
+		data_dict['audio'].extend(audio_cos.tolist())
 
-		self.log(f"pos_vid_cos_mean/{mode}", 	pos_vid_cos.mean().cpu(), sync_dist=True)
-		self.log(f"pos_vid_cos_std/{mode}", 	pos_vid_cos.std().cpu(), 	sync_dist=True)
-		self.log(f"neg_vid_cos_mean/{mode}",	neg_vid_cos.mean().cpu(),	sync_dist=True)
-		self.log(f"neg_vid_cos_std/{mode}", 	neg_vid_cos.std().cpu(), 	sync_dist=True)
-		self.log(f"pos_aud_cos_mean/{mode}", 	pos_aud_cos.mean().cpu(), sync_dist=True)
-		self.log(f"pos_aud_cos_std/{mode}", 	pos_aud_cos.std().cpu(), 	sync_dist=True)
-		self.log(f"neg_aud_cos_mean/{mode}", 	neg_aud_cos.mean().cpu(), sync_dist=True)
-		self.log(f"neg_aud_cos_std/{mode}", 	neg_aud_cos.std().cpu(), 	sync_dist=True)
+		data_dict['target'].extend(target.tolist())
+		return data_dict
+
+
+	def write_cos_stats(self, data_dict, mode):
+		video = np.array(data_dict['video'])
+		audio = np.array(data_dict['audio'])
+		target = np.array(data_dict['target'])
+
+		pos_video = video[target.nonzero()]
+		neg_video = video[(1-target).nonzero()]
+		pos_audio = audio[target.nonzero()]
+		neg_audio = audio[(1-target).nonzero()]
+
+		self.log(f"pos_vid_cos_mean/{mode}", 	pos_video.mean(), sync_dist=True)
+		self.log(f"pos_vid_cos_std/{mode}", 	pos_video.std(), 	sync_dist=True)
+		self.log(f"neg_vid_cos_mean/{mode}",	neg_video.mean(),	sync_dist=True)
+		self.log(f"neg_vid_cos_std/{mode}", 	neg_video.std(), 	sync_dist=True)
+		self.log(f"pos_aud_cos_mean/{mode}", 	pos_audio.mean(), sync_dist=True)
+		self.log(f"pos_aud_cos_std/{mode}", 	pos_audio.std(), 	sync_dist=True)
+		self.log(f"neg_aud_cos_mean/{mode}", 	neg_audio.mean(), sync_dist=True)
+		self.log(f"neg_aud_cos_std/{mode}", 	neg_audio.std(), 	sync_dist=True)
 
 
 
@@ -377,7 +401,7 @@ def create_dataset(args):
 		disable_pb=args.disable_pb
 	)
 
-	train_loader = load_data(args, mode='train', workers=11, batch_size=128)
+	train_loader = load_data(args, mode='train', workers=11, batch_size=64)
 	val_loader = load_data(args, mode='val', workers=2, batch_size=512)
 
 	return train_loader, val_loader
