@@ -24,6 +24,6 @@ class ContrastiveLoss(nn.Module):
 		# Negative label, target is 1. Only distances less than the margin add up. Minimizes loss by maximizing distance.
 		neg = (target)*(1/2)*(torch.clamp(neg_margins - distance, min=0.0))**2
 
-		loss = torch.mean(neg + pos)
+		loss = (neg + pos).sum()
 
 		return loss

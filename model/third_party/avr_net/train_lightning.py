@@ -96,9 +96,9 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		self.train_cos_stats = self.cos_batch_stats(video, audio, target, self.train_cos_stats)
 		# self.cosine_stats(video, audio, target, mode='train')
 
-		self.log("loss/train", 			loss, 			sync_dist=True, on_step=True)
-		self.log("acc/train", 			accuracy, 	sync_dist=True, on_step=True)
-		self.log("f1_score/train", 	fscore, 		sync_dist=True, on_step=True)
+		self.log("loss/train", 			loss, 			sync_dist=True) #, on_step=True)
+		self.log("acc/train", 			accuracy, 	sync_dist=True) #, on_step=True)
+		self.log("f1_score/train", 	fscore, 		sync_dist=True) #, on_step=True)
 
 		for video_id, index_a, index_b, score in zip(batch['video_id'], batch['index_a'], batch['index_b'], scores):
 			self.train_predictions.append((video_id, index_a, index_b, score.detach().cpu()))
@@ -139,6 +139,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 		self.log("der/train", der, 	sync_dist=True)
 		shutil.rmtree(sys_path)
+		os.remove(similarities_path)
 
 
 	def on_validation_epoch_start(self):
@@ -206,6 +207,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 		self.log("der/val", der, 	sync_dist=True)
 		shutil.rmtree(sys_path)
+		os.remove(similarities_path)
 
 
 	def predict_step(self, batch, batch_idx, dataloader_idx=0):
@@ -401,7 +403,7 @@ def create_dataset(args):
 		disable_pb=args.disable_pb
 	)
 
-	train_loader = load_data(args, mode='train', workers=11, batch_size=256)
+	train_loader = load_data(args, mode='train', workers=11, batch_size=64)
 	val_loader = load_data(args, mode='val', workers=2, batch_size=512)
 
 	return train_loader, val_loader

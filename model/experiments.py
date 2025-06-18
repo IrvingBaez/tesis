@@ -102,9 +102,9 @@ if __name__=='__main__':
 		'cross_attention':	 			'concat', 			# 'fusion' 'concat'
 		'fine_tunning':						False,
 		# Hyperparams
-		'loss_fn':								'contrastive', 					# 'bce' 'mse' 'contrastive'
-		'pos_margin':							0.99,
-		'neg_margin':							0.45,
+		'loss_fn':								'contrastive',	# 'bce' 'mse' 'contrastive'
+		'pos_margin':							0.40,						# [0.0 - 0.5] Punishes false negatives, better recall
+		'neg_margin':							0.95, 					# [0.5 - 1.0] Punishes false positives, better precision
 		'optimizer':							'sgd', 					# 'sgd' 'adam'
 		'learning_rate': 					1e-5,
 		'momentum': 							0.0,
