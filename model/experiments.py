@@ -103,12 +103,12 @@ if __name__=='__main__':
 		'fine_tunning':						False,
 		# Hyperparams
 		'loss_fn':								'contrastive', 					# 'bce' 'mse' 'contrastive'
-		'pos_margin':							0.45,
-		'neg_margin':							0.99,
+		'pos_margin':							0.99,
+		'neg_margin':							0.45,
 		'optimizer':							'sgd', 					# 'sgd' 'adam'
 		'learning_rate': 					1e-5,
 		'momentum': 							0.0,
-		'weight_decay': 					5e-5,
+		'weight_decay': 					5e-3,
 		'step_size': 							1,
 		'gamma': 									0.99,
 		'epochs': 								100,

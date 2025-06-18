@@ -15,13 +15,14 @@ class ContrastiveLoss(nn.Module):
 
 		# 1 = similar or 0 distance. 0 = different, or 1 distance.
 		distance = 1 - scores
+		target = 1 - y
 
 		# y=1 for similar pairs. y=0 for disimilar pairs
-		# Positive label. All distances add up. Minimizes loss by minimizing distance.
-		pos = y*(1/2)*(torch.clamp(distance - pos_margins, min=0.0))**2
+		# Positive label, target is 0. All distances add up. Minimizes loss by minimizing distance.
+		pos = (1-target)*(1/2)*(torch.clamp(distance - pos_margins, min=0.0))**2
 
-		# Negative label. Only distances less than the margin add up. Minimizes loss by maximizing distance.
-		neg = (1 - y)*(1/2)*(torch.clamp(neg_margins - distance, min=0.0))**2
+		# Negative label, target is 1. Only distances less than the margin add up. Minimizes loss by maximizing distance.
+		neg = (target)*(1/2)*(torch.clamp(neg_margins - distance, min=0.0))**2
 
 		loss = torch.mean(neg + pos)
 

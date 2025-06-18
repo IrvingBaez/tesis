@@ -401,7 +401,7 @@ def create_dataset(args):
 		disable_pb=args.disable_pb
 	)
 
-	train_loader = load_data(args, mode='train', workers=11, batch_size=64)
+	train_loader = load_data(args, mode='train', workers=11, batch_size=256)
 	val_loader = load_data(args, mode='val', workers=2, batch_size=512)
 
 	return train_loader, val_loader
