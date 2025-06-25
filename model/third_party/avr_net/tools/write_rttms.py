@@ -10,8 +10,7 @@ from model.third_party.avr_net.tools.ahc_cluster import AHC_Cluster
 def write_rttms(args):
 	os.makedirs(f'{args.sys_path}/predictions', exist_ok=True)
 
-	threshold = 0.14
-	cluster = AHC_Cluster(threshold)
+	cluster = AHC_Cluster(args.ahc_threshold)
 	rttm_list = []
 
 	similarity_data = torch.load(args.similarities_path)
@@ -68,9 +67,10 @@ def merge_frames(starts, ends, labels):
 def initialize_arguments(**kwargs):
 	parser = argparse.ArgumentParser(description = "Light ASD prediction")
 
-	parser.add_argument('--data_type',					type=str,	help='Type of data being processed, test, val or train')
-	parser.add_argument('--sys_path',						type=str,	help='Path to the folder where to save all the system outputs')
-	parser.add_argument('--similarities_path',	type=str,	help='Path to the file with similarity data')
+	parser.add_argument('--data_type',					type=str,		help='Type of data being processed, test, val or train')
+	parser.add_argument('--sys_path',						type=str,		help='Path to the folder where to save all the system outputs')
+	parser.add_argument('--similarities_path',	type=str,		help='Path to the file with similarity data')
+	parser.add_argument('--ahc_threshold', 			type=float, help='Threshold distance for the AHC algorithm', default=0.3)
 
 	args = argparse_helper(parser, **kwargs)
 

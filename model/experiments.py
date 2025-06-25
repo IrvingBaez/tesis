@@ -105,6 +105,7 @@ if __name__=='__main__':
 		'loss_fn':								'contrastive',	# 'bce' 'mse' 'contrastive'
 		'pos_margin':							0.40,						# [0.0 - 0.5] Punishes false negatives, better recall
 		'neg_margin':							0.95, 					# [0.5 - 1.0] Punishes false positives, better precision
+		'ahc_threshold':					0.14,						# Default: 0.3, original: 0.14
 		'optimizer':							'sgd', 					# 'sgd' 'adam'
 		'learning_rate': 					1e-5,
 		'momentum': 							0.0,

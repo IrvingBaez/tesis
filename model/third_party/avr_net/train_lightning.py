@@ -195,7 +195,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 		similarity_data = {'similarities': similarities, 'starts': self.args.val_starts, 'ends': self.args.val_ends}
 		save_data(similarity_data, similarities_path, verbose=True, override=True)
-		write_rttms(similarities_path=similarities_path, sys_path=sys_path, data_type='val')
+		write_rttms(similarities_path=similarities_path, sys_path=sys_path, data_type='val', ahc_threshold=self.args.ahc_threshold)
 
 		score_avd(data_type='val', sys_path=f'{sys_path}/val.out', output_path=f'{sys_path}/val_scores.out')
 
@@ -277,6 +277,7 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--loss_fn', 								type=str, 	default='', 			help='Loss function to use during training')
 	parser.add_argument('--pos_margin', 						type=float, default=0.0, 			help='Positive margin for contrastive loss')
 	parser.add_argument('--neg_margin', 						type=float, default=1.0, 			help='Negative margin for contrastive loss')
+	parser.add_argument('--ahc_threshold', 					type=float, default=0.3, 			help='Threshold distance for the AHC algorithm')
 	parser.add_argument('--optimizer', 							type=str, 	default='', 			help='Optimizer to use during training')
 	parser.add_argument('--task', 									type=str, 	default='train', 	help='Execution mode, either train or val')
 	parser.add_argument('--disable_pb', 						action='store_true', 					help='If true, hides progress bars')
@@ -376,7 +377,7 @@ def train(args):
 
 
 def clean_up_args(args):
-		allowed_args = ['loss_fn', 'add_contrastive', 'val_starts', 'val_ends', 'val_utterance_counts', 'train_starts', 'train_ends', 'train_utterance_counts', 'self_attention', 'cross_attention', 'self_attention_dropout', 'fine_tunning', 'learning_rate', 'weight_decay', 'momentum', 'optimizer', 'step_size', 'gamma', 'frozen_epochs', 'pos_margin', 'neg_margin']
+		allowed_args = ['loss_fn', 'add_contrastive', 'val_starts', 'val_ends', 'val_utterance_counts', 'train_starts', 'train_ends', 'train_utterance_counts', 'self_attention', 'cross_attention', 'self_attention_dropout', 'fine_tunning', 'learning_rate', 'weight_decay', 'momentum', 'optimizer', 'step_size', 'gamma', 'frozen_epochs', 'pos_margin', 'neg_margin', 'ahc_threshold']
 		current_args = [key for key in args.__dict__.keys()]
 
 		args_copy = copy.deepcopy(args)
