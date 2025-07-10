@@ -91,11 +91,11 @@ if __name__=='__main__':
 		'val_video_proportion':		1.0,
 		'aligned': 								False,
 		'balanced':								False,
-		'checkpoint': 						'model/third_party/avr_net/checkpoints/lightning_logs/version_1126077/checkpoints/epoch=5-step=416688.ckpt',
+		'checkpoint': 						'model/third_party/avr_net/checkpoints/lightning_logs/version_1159735/checkpoints/epoch=4-step=1220510.ckpt',
 		'max_frames': 						60,
 		'disable_pb': 						False,
 		'db_video_mode': 					'average',			# 'pick_first' 'pick_random' 'keep_all' 'average'
-		'task':										'train',				# 'train' 'val'
+		'task':										'train',				# 'train' 'val' 'test'
 		# Architecture
 		'self_attention': 				'pick_first', 	# 'class_token' 'pick_first',
 		'self_attention_dropout': 0.2,
@@ -103,9 +103,9 @@ if __name__=='__main__':
 		'fine_tunning':						False,
 		# Hyperparams
 		'loss_fn':								'contrastive',	# 'bce' 'mse' 'contrastive'
-		'pos_margin':							0.40,						# [0.0 - 0.5] Punishes false negatives, better recall
+		'pos_margin':							0.45,						# [0.0 - 0.5] Punishes false negatives, better recall
 		'neg_margin':							0.95, 					# [0.5 - 1.0] Punishes false positives, better precision
-		'ahc_threshold':					0.14,						# Default: 0.3, original: 0.14
+		'ahc_threshold':					0.45,						# Default: 0.3, original: 0.14
 		'optimizer':							'sgd', 					# 'sgd' 'adam'
 		'learning_rate': 					1e-5,
 		'momentum': 							0.0,

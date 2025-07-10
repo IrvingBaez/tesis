@@ -107,6 +107,8 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 
 	def on_train_epoch_end(self):
+		return
+
 		self.write_cos_stats(self.train_cos_stats, 'train')
 
 		similarities = {}
@@ -175,7 +177,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 	# Calculate DER as part of validation end
 	def on_validation_epoch_end(self):
-		self.write_cos_stats(self.val_cos_stats, 'val')
+		# self.write_cos_stats(self.val_cos_stats, 'val')
 
 		similarities = {}
 
@@ -206,6 +208,74 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		der = float(last_line.split()[3])
 
 		self.log("der/val", der, 	sync_dist=True)
+		shutil.rmtree(sys_path)
+		os.remove(similarities_path)
+
+
+	def on_test_epoch_start(self):
+		self.validation_predictions = []
+		# self.val_cos_stats = {'video': [], 'audio': [], 'target': []}
+
+
+	def test_step(self, batch, batch_idx):
+		video, audio, task_full, target = batch['video'], batch['audio'], batch['task_full'], batch['target']
+		scores = self.model(video, audio, task_full)
+
+		loss = self.loss_fn(scores, target)
+
+		accuracy = 	((scores > 0.5) == target).float().mean()
+		fscore = 		self.metric(scores, target)
+		recall = 		self.metric_recall(scores, target)
+		precision = self.metric_precision(scores, target)
+
+		# self.val_cos_stats = self.cos_batch_stats(video, audio, target, self.val_cos_stats)
+		# self.cosine_stats(video, audio, target, mode='val')
+
+		self.log("loss/test", 			loss, 			sync_dist=True)
+		self.log("acc/test", 				accuracy, 	sync_dist=True)
+		self.log("f1_score/test", 	fscore, 		sync_dist=True)
+		self.log("recall/test", 		recall, 		sync_dist=True)
+		self.log("precision/test", 	precision, 	sync_dist=True)
+
+		for video_id, index_a, index_b, score in zip(batch['video_id'], batch['index_a'], batch['index_b'], scores):
+			self.validation_predictions.append((video_id, index_a, index_b, score.detach().cpu()))
+
+		return loss
+
+
+	# Calculate DER as part of validation end
+	def on_test_epoch_end(self):
+		# self.write_cos_stats(self.val_cos_stats, 'val')
+
+		similarities = {}
+
+		for video_id in self.args.val_utterance_counts.keys():
+			similarities[video_id] = torch.diag_embed(torch.ones([self.args.val_utterance_counts[video_id]]))
+
+		for prediction in self.validation_predictions:
+			video_id, index_a, index_b, score = prediction
+
+			similarities[video_id][index_a, index_b] = score
+			similarities[video_id][index_b, index_a] = score
+
+		self.validation_predictions = None
+
+		similarities_path = f'{self.logger.log_dir}/similarities_test.pth'
+		sys_path = f'{self.logger.log_dir}/rttms'
+
+		similarity_data = {'similarities': similarities, 'starts': self.args.val_starts, 'ends': self.args.val_ends}
+		save_data(similarity_data, similarities_path, verbose=True, override=True)
+		write_rttms(similarities_path=similarities_path, sys_path=sys_path, data_type='test', ahc_threshold=self.args.ahc_threshold)
+
+		score_avd(data_type='test', sys_path=f'{sys_path}/test.out', output_path=f'{sys_path}/test_scores.out')
+
+		with open(f'{sys_path}/test_scores.out', 'r') as file:
+			scores = file.read()
+
+		last_line = scores.split('\n')[-1]
+		der = float(last_line.split()[3])
+
+		self.log("der/test", der, 	sync_dist=True)
 		shutil.rmtree(sys_path)
 		os.remove(similarities_path)
 
@@ -338,11 +408,11 @@ def initialize_arguments(**kwargs):
 def train(args):
 	torch.set_float32_matmul_precision('high')
 
-	train_loader, val_loader = create_dataset(args)
+	train_loader, eval_loader = create_dataset(args)
 
-	args.val_utterance_counts = val_loader.dataset.utterance_counts
-	args.val_starts = val_loader.dataset.starts()
-	args.val_ends = val_loader.dataset.ends()
+	args.val_utterance_counts = eval_loader.dataset.utterance_counts
+	args.val_starts = eval_loader.dataset.starts()
+	args.val_ends = eval_loader.dataset.ends()
 
 	args.train_utterance_counts = train_loader.dataset.utterance_counts
 	args.train_starts = train_loader.dataset.starts()
@@ -370,10 +440,13 @@ def train(args):
 	)
 
 	if args.task == 'train':
-		trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+		trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=eval_loader)
 	elif args.task == 'val':
 		assert args.checkpoint is not None, 'Cannot eval without a given checkpoint'
-		trainer.validate(model=model, dataloaders=val_loader)
+		trainer.validate(model=model, dataloaders=eval_loader)
+	elif args.task == 'test':
+		assert args.checkpoint is not None, 'Cannot test without a given checkpoint'
+		trainer.test(model=model, dataloaders=eval_loader)
 
 
 def clean_up_args(args):
@@ -396,7 +469,7 @@ def clean_up_args(args):
 
 
 def create_dataset(args):
-	args.train_features_path, args.val_features_path = extract_features(
+	args.train_features_path, args.val_features_path, args.test_features_path = extract_features(
 		sys_path=args.sys_path,
 		aligned=args.aligned,
 		max_frames=args.max_frames,
@@ -405,17 +478,21 @@ def create_dataset(args):
 	)
 
 	train_loader = load_data(args, mode='train', workers=11, batch_size=64)
-	val_loader = load_data(args, mode='val', workers=2, batch_size=512)
+	eval_loader = load_data(args, mode=args.task, workers=2, batch_size=512)
 
-	return train_loader, val_loader
+	return train_loader, eval_loader
 
 
 def load_data(args, mode, workers, batch_size=256):
 	if mode=='train':
 		dataset = ClusteringDataset(args.train_features_path, args.disable_pb, video_proportion=args.video_proportion, balanced=args.balanced)
-
-	if mode=='val':
+	elif mode=='val':
 		dataset = ClusteringDataset(args.val_features_path, args.disable_pb, video_proportion=args.val_video_proportion)
+	elif mode=='test':
+		print('Ignoring val_video_proportion, testing with proportion 1.0')
+		dataset = ClusteringDataset(args.test_features_path, args.disable_pb, video_proportion=1.0)
+	else:
+		raise ValueError(f"Dataset mode '{mode}' not recognized")
 
 	sampler = SequentialSampler(dataset)
 

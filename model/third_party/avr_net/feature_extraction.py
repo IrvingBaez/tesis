@@ -17,6 +17,7 @@ def extract_all_features(args):
 	with torch.no_grad():
 		extract_features(args, mode='train')
 		extract_features(args, mode='val')
+		extract_features(args, mode='test')
 
 
 def extract_features(args, mode):
@@ -26,8 +27,12 @@ def extract_features(args, mode):
 
 	if mode == 'train':
 		config = args.train_dataset_config
-	else:
+	elif mode == 'val':
 		config = args.val_dataset_config
+	elif mode == 'test':
+		config = args.test_dataset_config
+	else:
+		raise ValueError(f"Dataset mode '{mode}' not recognized")
 
 	output_path = f'{args.features_path}/{mode}'
 	os.makedirs(output_path, exist_ok=True)
@@ -134,14 +139,22 @@ def initialize_arguments(**kwargs):
 		'max_frames':		args.max_frames
 	}
 
+	with open(f'dataset/split/test.list', 'r') as file:
+		test_video_ids = file.read().split('\n')
+
+	args.test_dataset_config = {
+		'video_ids':		test_video_ids,
+		'waves_path':		get_path('waves_path', denoiser='dihard18'),
+		'rttms_path':		get_path('avd_path', avd_detector='ground_truth') + '/predictions',
+		'labs_path':		get_path('vad_path', vad_detector='ground_truth') + '/predictions',
+		'frames_path':	get_path('asd_path', asd_detector='ground_truth') + ('/aligned_tracklets' if args.aligned else '/tracklets'),
+		'max_frames':		args.max_frames
+	}
+
 	assert Path(args.train_dataset_config['waves_path']).exists()
 	assert Path(args.train_dataset_config['rttms_path']).exists()
 	assert Path(args.train_dataset_config['labs_path']).exists()
 	assert Path(args.train_dataset_config['frames_path']).exists()
-	assert Path(args.val_dataset_config['waves_path']).exists()
-	assert Path(args.val_dataset_config['rttms_path']).exists()
-	assert Path(args.val_dataset_config['labs_path']).exists()
-	assert Path(args.val_dataset_config['frames_path']).exists()
 
 	args.sys_path = 'model/third_party/avr_net/features'
 	args.features_path = f'{args.sys_path}/{args.max_frames}_frames'
@@ -157,7 +170,7 @@ def main(**kwargs):
 	args = initialize_arguments(**kwargs, not_empty=True)
 	extract_all_features(args)
 
-	return args.features_path + '/train', args.features_path + '/val'
+	return args.features_path + '/train', args.features_path + '/val', args.features_path + '/test'
 
 
 if __name__ == '__main__':
