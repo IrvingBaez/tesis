@@ -68,6 +68,10 @@ def argparse_helper(parser, **kwargs):
 
 			args_list.append(f'--{key}')
 
+			if value is None:
+				args_list.pop()
+				continue
+
 			if isinstance(value, bool):
 				booleans.append((key, value))
 				args_list.pop()

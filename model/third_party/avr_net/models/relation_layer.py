@@ -45,14 +45,14 @@ class RelationLayer(nn.Module):
 			self.load_state_dict(checkpoint['model_state_dict'])
 
 
-	def partial_task_token(self, index):
-		table = torch.ones((4, 1536), dtype=torch.float32, device=index.device)
-		table[0, 0: 512] = 0
-		table[0, 768: 1280] = 0
-		table[1, 0: 512] = 0
-		table[2, 768: 1280] = 0
+	# def partial_task_token(self, index):
+	# 	table = torch.ones((4, 1536), dtype=torch.float32, device=index.device)
+	# 	table[0, 0: 512] = 0
+	# 	table[0, 768: 1280] = 0
+	# 	table[1, 0: 512] = 0
+	# 	table[2, 768: 1280] = 0
 
-		return torch.cat((table[index][..., :768], self.task_token(index)[..., :768]), dim=-1)
+	# 	return torch.cat((table[index][..., :768], self.task_token(index)[..., :768]), dim=-1)
 
 
 	def _make_layer(self, block, planes, blocks, stride=1):

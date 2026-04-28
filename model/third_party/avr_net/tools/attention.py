@@ -76,6 +76,28 @@ class SelfAttentionClassToken(nn.Module):
 		return cls_output
 
 
+class TemporalAttentionPooling(nn.Module):
+    def __init__(self, C):
+        super().__init__()
+        self.score = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(),
+            nn.Linear(C, 1)
+        )
+
+    def forward(self, x):
+        # x: [B, N, C, H, W]
+        B, N, C, H, W = x.shape
+
+        scores = self.score(x.view(B*N, C, H, W))
+        scores = scores.view(B, N)
+
+        weights = torch.softmax(scores, dim=1)
+
+        out = (weights[:, :, None, None, None] * x).sum(dim=1, keepdim=True)
+        return out
+
+
 '''
 Cross attention recieves two tensors:
 	Video shape: ([N, 1, 512, 7, 7])

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eu
 
-env_name='avr-net'
+env_name='tesis'
 
 source ~/miniconda3/etc/profile.d/conda.sh
 eval "$(conda shell.bash hook)"

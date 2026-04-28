@@ -1,15 +1,18 @@
 # Downloadable dataset
+dataset/
 dataset/videos/
 dataset/waves/
 dataset/vad/
 dataset/asd/
 dataset/avd/
 dataset/face_clips/
+model/third_party/avr_net/old_results/
 model/third_party/avr_net/results/
 
 # Downloadable model
 *.pth
 *.ckpt
+model/third_party/avr_net/old_checkpoints/
 model/third_party/avr_net/checkpoints/
 
 # Program output

@@ -38,7 +38,7 @@ def extract_features(args, mode):
 	os.makedirs(output_path, exist_ok=True)
 
 	video_ids = config['video_ids']
-	for video_id in tqdm(video_ids, desc=f'Extracting features for {mode}', disable=args.disable_pb):
+	for video_id in tqdm(video_ids, desc=f'Extracting features for {mode} ({args.features_path})', disable=args.disable_pb):
 		video_feats_path = f'{output_path}/{video_id}.pckl'
 		if os.path.exists(video_feats_path): continue
 

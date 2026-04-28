@@ -12,6 +12,8 @@ class Attention_AVRNet(nn.Module):
 		# Set cross attention
 		if self_attention == 'class_token':
 			self.self_attention 	= attention.SelfAttentionClassToken(dropout=dropout)
+		elif self_attention == 'temporal':
+			self.self_attention 	= attention.TemporalAttentionPooling(512)
 		else:
 			self.self_attention 	= attention.PickFirst()
 

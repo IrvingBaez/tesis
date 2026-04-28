@@ -13,7 +13,6 @@ from model.third_party.avr_net.train_lightning import main as train_lightning_av
 from model.third_party.avr_net.train_features_extraction import main as train_features_extraction
 # from model.asd.visualize_asd import main as visualize_asd
 # from model.denoise.denoise import main as denoise
-# from model.tools.der_and_losses import main as validation
 # from model.util import get_path
 
 
@@ -87,34 +86,36 @@ if __name__=='__main__':
 	# TODO: Test with video proportion <1 and no balancing
 	train_params = {
 		# Data config
-		'video_proportion': 			1.0,
+		'video_proportion': 		0.5,
 		'val_video_proportion':		1.0,
-		'aligned': 								False,
-		'balanced':								False,
-		'checkpoint': 						'model/third_party/avr_net/checkpoints/lightning_logs/version_1159735/checkpoints/epoch=4-step=1220510.ckpt',
-		'max_frames': 						60,
-		'disable_pb': 						False,
-		'db_video_mode': 					'average',			# 'pick_first' 'pick_random' 'keep_all' 'average'
-		'task':										'train',				# 'train' 'val' 'test'
+		'aligned': 					False,
+		'balanced':					False,
+		'checkpoint': 				'model/third_party/avr_net/old_checkpoints/lightning_logs/version_1191369/checkpoints/epoch=8-step=2196918.ckpt',
+		'max_frames': 				60,
+		'db_video_mode': 			'pick_first',	# 'pick_first' 'pick_random' 'keep_all' 'average'
+		'task':						'train',		# 'train' 'val' 'test'
+
 		# Architecture
-		'self_attention': 				'pick_first', 	# 'class_token' 'pick_first',
-		'self_attention_dropout': 0.2,
-		'cross_attention':	 			'concat', 			# 'fusion' 'concat'
-		'fine_tunning':						False,
+		'self_attention': 			'pick_first', 	# 'class_token', 'temporal', 'pick_first',
+		'self_attention_dropout':	0.2,
+		'cross_attention':	 		'concat', 		# 'fusion' 'concat'
+		'fine_tunning':				False,
+
 		# Hyperparams
-		'loss_fn':								'contrastive',	# 'bce' 'mse' 'contrastive'
-		'pos_margin':							0.45,						# [0.0 - 0.5] Punishes false negatives, better recall
-		'neg_margin':							0.95, 					# [0.5 - 1.0] Punishes false positives, better precision
-		'ahc_threshold':					0.45,						# Default: 0.3, original: 0.14
-		'optimizer':							'sgd', 					# 'sgd' 'adam'
-		'learning_rate': 					1e-5,
-		'momentum': 							0.0,
-		'weight_decay': 					5e-3,
-		'step_size': 							1,
-		'gamma': 									0.99,
-		'epochs': 								100,
-		# 'max_epochs':							10,
-		'frozen_epochs': 					0,
+		'loss_fn':					'contrastive',	# 'bce' 'mse' 'contrastive'
+		'pos_margin':				0.40,			# [0.0 - 0.5] Punishes false negatives, better recall
+		'neg_margin':				0.80, 			# [0.5 - 1.0] Punishes false positives, better precision
+		'ahc_threshold':			0.40,			# Default: 0.3, original: 0.14
+		'optimizer':				'sgd', 			# 'sgd' 'adam'
+		'learning_rate': 			5e-4,
+		'momentum': 				0.0,
+		'weight_decay': 			1e-4,
+		'step_size': 				1,
+		'gamma': 					0.99,
+		'epochs': 					25,
+		# 'max_epochs':				10,
+		'frozen_epochs': 			0,
+		'disable_pb': 				False,
 	}
 
 	print('Starting training with params: ', train_params)

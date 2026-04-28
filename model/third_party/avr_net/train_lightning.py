@@ -93,12 +93,9 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		accuracy = ((scores > 0.5) == target).float().mean()
 		fscore = self.metric(scores, target)
 
-		self.train_cos_stats = self.cos_batch_stats(video, audio, target, self.train_cos_stats)
-		# self.cosine_stats(video, audio, target, mode='train')
-
-		self.log("loss/train", 			loss, 			sync_dist=True) #, on_step=True)
-		self.log("acc/train", 			accuracy, 	sync_dist=True) #, on_step=True)
-		self.log("f1_score/train", 	fscore, 		sync_dist=True) #, on_step=True)
+		self.log("loss/train", 		loss, 		sync_dist=True) #, on_step=True)
+		self.log("acc/train", 		accuracy, 	sync_dist=True) #, on_step=True)
+		self.log("f1_score/train", 	fscore, 	sync_dist=True) #, on_step=True)
 
 		for video_id, index_a, index_b, score in zip(batch['video_id'], batch['index_a'], batch['index_b'], scores):
 			self.train_predictions.append((video_id, index_a, index_b, score.detach().cpu()))
@@ -107,10 +104,6 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 
 	def on_train_epoch_end(self):
-		return
-
-		self.write_cos_stats(self.train_cos_stats, 'train')
-
 		similarities = {}
 
 		for video_id in self.args.train_utterance_counts.keys():
@@ -125,13 +118,13 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		self.train_predictions = None
 
 		similarities_path = f'{self.logger.log_dir}/similarities.pth'
-		sys_path = f'{self.logger.log_dir}/rttms'
+		sys_path = f'{self.logger.log_dir}/train_{self.current_epoch}/rttms'
 
 		similarity_data = {'similarities': similarities, 'starts': self.args.train_starts, 'ends': self.args.train_ends}
 		save_data(similarity_data, similarities_path, verbose=True, override=True)
-		write_rttms(similarities_path=similarities_path, sys_path=sys_path, data_type='train')
+		write_rttms(similarities_path=similarities_path, sys_path=sys_path, data_type='train', ahc_threshold=self.args.ahc_threshold)
 
-		score_avd(data_type='train', sys_path=f'{sys_path}/train.out', output_path=f'{sys_path}/train_scores.out')
+		score_avd(data_type='train', sys_path=f'{sys_path}/train.out', output_path=f'{sys_path}/train_scores.out', ref_path=self.args.train_ref_out)
 
 		with open(f'{sys_path}/train_scores.out', 'r') as file:
 			scores = file.read()
@@ -140,7 +133,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		der = float(last_line.split()[3])
 
 		self.log("der/train", der, 	sync_dist=True)
-		shutil.rmtree(sys_path)
+		# shutil.rmtree(sys_path)
 		os.remove(similarities_path)
 
 
@@ -156,18 +149,15 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		loss = self.loss_fn(scores, target)
 
 		accuracy = 	((scores > 0.5) == target).float().mean()
-		fscore = 		self.metric(scores, target)
-		recall = 		self.metric_recall(scores, target)
+		fscore = 	self.metric(scores, target)
+		recall = 	self.metric_recall(scores, target)
 		precision = self.metric_precision(scores, target)
 
-		self.val_cos_stats = self.cos_batch_stats(video, audio, target, self.val_cos_stats)
-		# self.cosine_stats(video, audio, target, mode='val')
-
-		self.log("loss/val", 			loss, 			sync_dist=True)
-		self.log("acc/val", 			accuracy, 	sync_dist=True)
-		self.log("f1_score/val", 	fscore, 		sync_dist=True)
-		self.log("recall/val", 		recall, 		sync_dist=True)
-		self.log("precision/val", precision, 	sync_dist=True)
+		self.log("loss/val", 		loss, 		sync_dist=True)
+		self.log("acc/val", 		accuracy, 	sync_dist=True)
+		self.log("f1_score/val", 	fscore, 	sync_dist=True)
+		self.log("recall/val", 		recall, 	sync_dist=True)
+		self.log("precision/val",	precision, 	sync_dist=True)
 
 		for video_id, index_a, index_b, score in zip(batch['video_id'], batch['index_a'], batch['index_b'], scores):
 			self.validation_predictions.append((video_id, index_a, index_b, score.detach().cpu()))
@@ -177,8 +167,6 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 	# Calculate DER as part of validation end
 	def on_validation_epoch_end(self):
-		# self.write_cos_stats(self.val_cos_stats, 'val')
-
 		similarities = {}
 
 		for video_id in self.args.val_utterance_counts.keys():
@@ -193,13 +181,13 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		self.validation_predictions = None
 
 		similarities_path = f'{self.logger.log_dir}/similarities.pth'
-		sys_path = f'{self.logger.log_dir}/rttms'
+		sys_path = f'{self.logger.log_dir}/val_{self.current_epoch}/rttms'
 
 		similarity_data = {'similarities': similarities, 'starts': self.args.val_starts, 'ends': self.args.val_ends}
 		save_data(similarity_data, similarities_path, verbose=True, override=True)
 		write_rttms(similarities_path=similarities_path, sys_path=sys_path, data_type='val', ahc_threshold=self.args.ahc_threshold)
 
-		score_avd(data_type='val', sys_path=f'{sys_path}/val.out', output_path=f'{sys_path}/val_scores.out')
+		score_avd(data_type='val', sys_path=f'{sys_path}/val.out', output_path=f'{sys_path}/val_scores.out', ref_path=self.args.val_ref_out)
 
 		with open(f'{sys_path}/val_scores.out', 'r') as file:
 			scores = file.read()
@@ -208,7 +196,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		der = float(last_line.split()[3])
 
 		self.log("der/val", der, 	sync_dist=True)
-		shutil.rmtree(sys_path)
+		# shutil.rmtree(sys_path)
 		os.remove(similarities_path)
 
 
@@ -224,17 +212,14 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		loss = self.loss_fn(scores, target)
 
 		accuracy = 	((scores > 0.5) == target).float().mean()
-		fscore = 		self.metric(scores, target)
-		recall = 		self.metric_recall(scores, target)
+		fscore = 	self.metric(scores, target)
+		recall = 	self.metric_recall(scores, target)
 		precision = self.metric_precision(scores, target)
 
-		# self.val_cos_stats = self.cos_batch_stats(video, audio, target, self.val_cos_stats)
-		# self.cosine_stats(video, audio, target, mode='val')
-
-		self.log("loss/test", 			loss, 			sync_dist=True)
-		self.log("acc/test", 				accuracy, 	sync_dist=True)
-		self.log("f1_score/test", 	fscore, 		sync_dist=True)
-		self.log("recall/test", 		recall, 		sync_dist=True)
+		self.log("loss/test", 		loss, 		sync_dist=True)
+		self.log("acc/test", 		accuracy, 	sync_dist=True)
+		self.log("f1_score/test", 	fscore, 	sync_dist=True)
+		self.log("recall/test", 	recall, 	sync_dist=True)
 		self.log("precision/test", 	precision, 	sync_dist=True)
 
 		for video_id, index_a, index_b, score in zip(batch['video_id'], batch['index_a'], batch['index_b'], scores):
@@ -290,75 +275,39 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		return predictions
 
 
-	def cos_batch_stats(self, video, audio, target, data_dict):
-		B = video.shape[0]
-		target = target.reshape(B)
-
-		video_a, video_b = video[:,0,...].reshape(B, 512*49), video[:,1,...].reshape(B, 512*49)
-		video_cos = self.cos(video_a, video_b)
-		data_dict['video'].extend(video_cos.tolist())
-
-		audio_a, audio_b = audio[:,0,...].reshape(B, 256*49), audio[:,1,...].reshape(B, 256*49)
-		audio_cos = self.cos(audio_a, audio_b)
-		data_dict['audio'].extend(audio_cos.tolist())
-
-		data_dict['target'].extend(target.tolist())
-		return data_dict
-
-
-	def write_cos_stats(self, data_dict, mode):
-		video = np.array(data_dict['video'])
-		audio = np.array(data_dict['audio'])
-		target = np.array(data_dict['target'])
-
-		pos_video = video[target.nonzero()]
-		neg_video = video[(1-target).nonzero()]
-		pos_audio = audio[target.nonzero()]
-		neg_audio = audio[(1-target).nonzero()]
-
-		self.log(f"pos_vid_cos_mean/{mode}", 	pos_video.mean(), sync_dist=True)
-		self.log(f"pos_vid_cos_std/{mode}", 	pos_video.std(), 	sync_dist=True)
-		self.log(f"neg_vid_cos_mean/{mode}",	neg_video.mean(),	sync_dist=True)
-		self.log(f"neg_vid_cos_std/{mode}", 	neg_video.std(), 	sync_dist=True)
-		self.log(f"pos_aud_cos_mean/{mode}", 	pos_audio.mean(), sync_dist=True)
-		self.log(f"pos_aud_cos_std/{mode}", 	pos_audio.std(), 	sync_dist=True)
-		self.log(f"neg_aud_cos_mean/{mode}", 	neg_audio.mean(), sync_dist=True)
-		self.log(f"neg_aud_cos_std/{mode}", 	neg_audio.std(), 	sync_dist=True)
-
-
 
 def initialize_arguments(**kwargs):
 	parser = argparse.ArgumentParser(description = "Attention AVR-Net training")
 
 	# TRAINING CONFIGURATION
-	parser.add_argument('--learning_rate',					type=float,	default=0.001, 		help='Training base learning rate')
-	parser.add_argument('--momentum',								type=float, default=0.0,			help='Training momentum for SDG optimizer. Ignored if Adam optimizer is selected.')
-	parser.add_argument('--weight_decay',						type=float, default=0.0001,		help='Training weight decay for SDG optimizer')
-	parser.add_argument('--step_size',							type=int, 	default=5,				help='Training stepsize for StepLR scheduler')
-	parser.add_argument('--gamma',									type=float, default=0.5,			help='Training gamma for StepLR scheduler')
-	parser.add_argument('--video_proportion', 			type=float, default=1.0,			help='Percentage of available videos to use in training')
+	parser.add_argument('--learning_rate',			type=float,	default=0.001, 			help='Training base learning rate')
+	parser.add_argument('--momentum',				type=float, default=0.0,			help='Training momentum for SDG optimizer. Ignored if Adam optimizer is selected.')
+	parser.add_argument('--weight_decay',			type=float, default=0.0001,			help='Training weight decay for SDG optimizer')
+	parser.add_argument('--step_size',				type=int, 	default=5,				help='Training stepsize for StepLR scheduler')
+	parser.add_argument('--gamma',					type=float, default=0.5,			help='Training gamma for StepLR scheduler')
+	parser.add_argument('--video_proportion', 		type=float, default=1.0,			help='Percentage of available videos to use in training')
 	parser.add_argument('--val_video_proportion', 	type=float, default=1.0,			help='Percentage of available videos to use in validation')
-	parser.add_argument('--epochs', 								type=int, 	default=10, 			help='Epochs to add to the training of the checkpoint')
-	parser.add_argument('--max_epochs',							type=int, 	default=None, 		help='Force stop after this many epochs', required=False)
-	parser.add_argument('--frozen_epochs', 					type=int, 	default=0, 				help='Epochs to train without updating relation network weights')
-	parser.add_argument('--self_attention', 				type=str, 	default='',				help='Self attention method to marge available frame features')
+	parser.add_argument('--epochs', 				type=int, 	default=10, 			help='Epochs to add to the training of the checkpoint')
+	parser.add_argument('--max_epochs',				type=int, 	default=None, 			help='Force stop after this many epochs', required=False)
+	parser.add_argument('--frozen_epochs', 			type=int, 	default=0, 				help='Epochs to train without updating relation network weights')
+	parser.add_argument('--self_attention', 		type=str, 	default='',				help='Self attention method to marge available frame features')
 	parser.add_argument('--self_attention_dropout', type=float, default=0.1, 			help='Dropout used in self-attention transformer')
-	parser.add_argument('--cross_attention', 				type=str, 	default='', 			help='Cross attention method to marge frame and audio features')
-	parser.add_argument('--loss_fn', 								type=str, 	default='', 			help='Loss function to use during training')
-	parser.add_argument('--pos_margin', 						type=float, default=0.0, 			help='Positive margin for contrastive loss')
-	parser.add_argument('--neg_margin', 						type=float, default=1.0, 			help='Negative margin for contrastive loss')
-	parser.add_argument('--ahc_threshold', 					type=float, default=0.3, 			help='Threshold distance for the AHC algorithm')
-	parser.add_argument('--optimizer', 							type=str, 	default='', 			help='Optimizer to use during training')
-	parser.add_argument('--task', 									type=str, 	default='train', 	help='Execution mode, either train or val')
-	parser.add_argument('--disable_pb', 						action='store_true', 					help='If true, hides progress bars')
+	parser.add_argument('--cross_attention', 		type=str, 	default='', 			help='Cross attention method to marge frame and audio features')
+	parser.add_argument('--loss_fn', 				type=str, 	default='', 			help='Loss function to use during training')
+	parser.add_argument('--pos_margin', 			type=float, default=0.0, 			help='Positive margin for contrastive loss')
+	parser.add_argument('--neg_margin', 			type=float, default=1.0, 			help='Negative margin for contrastive loss')
+	parser.add_argument('--ahc_threshold', 			type=float, default=0.3, 			help='Threshold distance for the AHC algorithm')
+	parser.add_argument('--optimizer', 				type=str, 	default='', 			help='Optimizer to use during training')
+	parser.add_argument('--task', 					type=str, 	default='train', 		help='Execution mode, either train or val')
+	parser.add_argument('--disable_pb', 			action='store_true', 				help='If true, hides progress bars')
 	# DATA CONFIGURATION
-	parser.add_argument('--max_frames', 						type=int, 	default=1,				help='How many frames to use in self-attention')
-	parser.add_argument('--db_video_mode', 					type=str, 	default='pick_first',	help='Selection mode for video frames in the dataset')
-	parser.add_argument('--aligned', 								action='store_true', 					help='Wether or not to use aligned frames')
-	parser.add_argument('--balanced',								action='store_true', 					help='Balance positives and negatives examples in training data.')
+	parser.add_argument('--max_frames', 			type=int, 	default=1,				help='How many frames to use in self-attention')
+	parser.add_argument('--db_video_mode', 			type=str, 	default='pick_first',	help='Selection mode for video frames in the dataset')
+	parser.add_argument('--aligned', 				action='store_true', 				help='Wether or not to use aligned frames')
+	parser.add_argument('--balanced',				action='store_true', 				help='Balance positives and negatives examples in training data.')
 	# MODEL CONFIGURATION
-	parser.add_argument('--checkpoint', 						type=str,		default=None, 		help='Path of checkpoint to continue training.')
-	parser.add_argument('--fine_tunning', 					action='store_true', 					help='Freezes all but the last relation layer.')
+	parser.add_argument('--checkpoint', 			type=str,		default=None, 		help='Path of checkpoint to continue training.')
+	parser.add_argument('--fine_tunning', 			action='store_true', 				help='Freezes all but the last relation layer.')
 
 	args = argparse_helper(parser, **kwargs)
 
@@ -405,6 +354,17 @@ def initialize_arguments(**kwargs):
 	return args
 
 
+def generate_filtered_ref(video_ids, data_type, output_path):
+	full_ref_path = get_path('avd_path', avd_detector='ground_truth') + f'/{data_type}.out'
+	selected_ids = set(video_ids)
+
+	with open(full_ref_path) as f:
+		filtered = [l for l in f if l.strip() and l.strip().split('/')[-1].replace('.rttm', '') in selected_ids]
+
+	with open(output_path, 'w') as f:
+		f.writelines(filtered)
+
+
 def train(args):
 	torch.set_float32_matmul_precision('high')
 
@@ -417,6 +377,12 @@ def train(args):
 	args.train_utterance_counts = train_loader.dataset.utterance_counts
 	args.train_starts = train_loader.dataset.starts()
 	args.train_ends = train_loader.dataset.ends()
+
+	args.train_ref_out = f'{args.train_features_path}/ref_train.out'
+	generate_filtered_ref(list(train_loader.dataset.utterance_counts.keys()), 'train', args.train_ref_out)
+
+	args.val_ref_out = f'{args.val_features_path}/ref_val.out'
+	generate_filtered_ref(list(eval_loader.dataset.utterance_counts.keys()), 'val', args.val_ref_out)
 
 	# TODO: Move to load_model
 	if args.checkpoint:
@@ -448,9 +414,11 @@ def train(args):
 		assert args.checkpoint is not None, 'Cannot test without a given checkpoint'
 		trainer.test(model=model, dataloaders=eval_loader)
 
+	return trainer
+
 
 def clean_up_args(args):
-		allowed_args = ['loss_fn', 'add_contrastive', 'val_starts', 'val_ends', 'val_utterance_counts', 'train_starts', 'train_ends', 'train_utterance_counts', 'self_attention', 'cross_attention', 'self_attention_dropout', 'fine_tunning', 'learning_rate', 'weight_decay', 'momentum', 'optimizer', 'step_size', 'gamma', 'frozen_epochs', 'pos_margin', 'neg_margin', 'ahc_threshold']
+		allowed_args = ['loss_fn', 'val_starts', 'val_ends', 'val_utterance_counts', 'val_ref_out', 'train_starts', 'train_ends', 'train_utterance_counts', 'train_ref_out', 'self_attention', 'cross_attention', 'self_attention_dropout', 'fine_tunning', 'learning_rate', 'weight_decay', 'momentum', 'optimizer', 'step_size', 'gamma', 'frozen_epochs', 'pos_margin', 'neg_margin', 'ahc_threshold']
 		current_args = [key for key in args.__dict__.keys()]
 
 		args_copy = copy.deepcopy(args)
@@ -459,7 +427,7 @@ def clean_up_args(args):
 			if key not in allowed_args:
 				args_copy.__dict__.pop(key)
 
-		not_empty = ['val_starts', 'val_ends', 'val_utterance_counts', 'train_starts', 'train_ends', 'train_utterance_counts']
+		not_empty = ['val_starts', 'val_ends', 'val_utterance_counts', 'val_ref_out', 'train_starts', 'train_ends', 'train_utterance_counts', 'train_ref_out']
 
 		for element in not_empty:
 			if element not in args_copy.__dict__.keys():
@@ -478,7 +446,8 @@ def create_dataset(args):
 	)
 
 	train_loader = load_data(args, mode='train', workers=11, batch_size=64)
-	eval_loader = load_data(args, mode=args.task, workers=2, batch_size=512)
+	eval_mode = 'test' if args.task == 'test' else 'val'
+	eval_loader = load_data(args, mode=eval_mode, workers=2, batch_size=512)
 
 	return train_loader, eval_loader
 
