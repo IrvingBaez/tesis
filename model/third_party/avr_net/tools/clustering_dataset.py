@@ -22,7 +22,9 @@ class ClusteringDataset(Dataset):
 		self.features_path = features_path
 		self.balanced = balanced
 		self.video_proportion = video_proportion
-		self.video_ids = sorted([os.path.basename(filepath).split('.')[0] for filepath in glob(f'{self.features_path}/*.pckl')])
+		self.video_ids = sorted(
+			[os.path.basename(filepath).split('.')[0] for filepath in glob(f'{self.features_path}/*.pckl')]
+		)
 
 		assert 0.0 < video_proportion <= 1.0, 'Video proportion must be in the interval (0,1]'
 
@@ -48,7 +50,7 @@ class ClusteringDataset(Dataset):
 			utterances = self._dict_features_to_items(video_id)
 
 			self._starts[video_id]	= np.array([utterance['start'] for utterance in utterances])
-			self._ends[video_id] 		= np.array([utterance['end'] for utterance in utterances])
+			self._ends[video_id]	= np.array([utterance['end'] for utterance in utterances])
 			self.utterance_counts[video_id] = len(utterances)
 			self._video_ranges.append(self._video_ranges[-1] + self._pairs_in_video(video_id))
 
@@ -136,7 +138,7 @@ class ClusteringDataset(Dataset):
 			element = self[index]
 			data.append({
 				'index': 	index,
-				'target': element['target'].detach().item(),
+				'target':	element['target'].detach().item(),
 				'task_a':	element['task_full'][0],
 				'task_b':	element['task_full'][1]
 			})
@@ -203,12 +205,12 @@ class ClusteringDataset(Dataset):
 		features = torch.load(f'{self.features_path}/{video_id}.pckl')
 
 		filtered = {
-			'feat_video': features['feat_video'],
-			'feat_audio': features['feat_audio'],
-			'target': 		features['targets'],
+			'feat_video': 	features['feat_video'],
+			'feat_audio': 	features['feat_audio'],
+			'target':		features['targets'],
 			'visible': 		features['visible'],
-			'start': 			features['start'],
-			'end': 				features['end']
+			'start':		features['start'],
+			'end':			features['end']
 		}
 
 		video_features = []
@@ -218,10 +220,10 @@ class ClusteringDataset(Dataset):
 			video_features.append({
 				'video_features':	feat_video,
 				'audio_features':	feat_audio,
-				'visible':				visible,
-				'target':					target,
-				'start':					start,
-				'end':						end
+				'visible':			visible,
+				'target':			target,
+				'start':			start,
+				'end':				end
 			})
 
 		return video_features

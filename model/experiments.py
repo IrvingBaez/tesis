@@ -83,43 +83,43 @@ if __name__=='__main__':
 
 
 	print('\n\n6- TRAINING AUDIO VISUAL DIARIZATION')
-	# TODO: Test with video proportion <1 and no balancing
-	train_params = {
-		# Data config
-		'video_proportion': 		0.5,
-		'val_video_proportion':		1.0,
-		'aligned': 					False,
-		'balanced':					False,
-		'checkpoint': 				'model/third_party/avr_net/old_checkpoints/lightning_logs/version_1191369/checkpoints/epoch=8-step=2196918.ckpt',
-		'max_frames': 				60,
-		'db_video_mode': 			'pick_first',	# 'pick_first' 'pick_random' 'keep_all' 'average'
-		'task':						'train',		# 'train' 'val' 'test'
+	for balanced in [True, False]:
+		train_params = {
+			# Data config
+			'video_proportion': 		1.0,
+			'val_video_proportion':		1.0,
+			'aligned': 					False,
+			'balanced':					balanced,
+			'checkpoint': 				'model/third_party/avr_net/old_checkpoints/lightning_logs/version_1191369/checkpoints/epoch=8-step=2196918.ckpt',
+			'max_frames': 				60,
+			'db_video_mode': 			'pick_first',	# 'pick_first' 'pick_random' 'keep_all' 'average'
+			'task':						'train',		# 'train' 'val' 'test'
 
-		# Architecture
-		'self_attention': 			'pick_first', 	# 'class_token', 'temporal', 'pick_first',
-		'self_attention_dropout':	0.2,
-		'cross_attention':	 		'concat', 		# 'fusion' 'concat'
-		'fine_tunning':				False,
+			# Architecture
+			'self_attention': 			'pick_first', 	# 'class_token', 'temporal', 'pick_first',
+			'self_attention_dropout':	0.2,
+			'cross_attention':	 		'concat', 		# 'fusion' 'concat'
+			'fine_tunning':				False,
 
-		# Hyperparams
-		'loss_fn':					'contrastive',	# 'bce' 'mse' 'contrastive'
-		'pos_margin':				0.40,			# [0.0 - 0.5] Punishes false negatives, better recall
-		'neg_margin':				0.80, 			# [0.5 - 1.0] Punishes false positives, better precision
-		'ahc_threshold':			0.40,			# Default: 0.3, original: 0.14
-		'optimizer':				'sgd', 			# 'sgd' 'adam'
-		'learning_rate': 			5e-4,
-		'momentum': 				0.0,
-		'weight_decay': 			1e-4,
-		'step_size': 				1,
-		'gamma': 					0.99,
-		'epochs': 					25,
-		# 'max_epochs':				10,
-		'frozen_epochs': 			0,
-		'disable_pb': 				False,
-	}
+			# Hyperparams
+			'loss_fn':					'contrastive',	# 'bce' 'mse' 'contrastive'
+			'pos_margin':				0.40,			# [0.0 - 0.5] Punishes false negatives, better recall
+			'neg_margin':				0.80, 			# [0.5 - 1.0] Punishes false positives, better precision
+			'ahc_threshold':			0.40,			# Default: 0.3, original: 0.14
+			'optimizer':				'sgd', 			# 'sgd' 'adam'
+			'learning_rate': 			5e-4,
+			'momentum': 				0.0,
+			'weight_decay': 			1e-4,
+			'step_size': 				1,
+			'gamma': 					0.99,
+			'epochs': 					5,
+			# 'max_epochs':				10,
+			'frozen_epochs': 			0,
+			'disable_pb': 				False,
+		}
 
-	print('Starting training with params: ', train_params)
-	train_lightning_avd(**train_params)
+		print('Starting training with params: ', train_params)
+		train_lightning_avd(**train_params)
 
 	print('\n\n7- AUDIO VISUAL DIARIZATION')
 	checkpoints = [

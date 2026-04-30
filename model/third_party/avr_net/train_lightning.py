@@ -1,6 +1,6 @@
 import argparse
 import copy
-import numpy as np
+import json
 import os
 import shutil
 import torch
@@ -9,6 +9,7 @@ import torch.nn.functional as F
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader, SequentialSampler
 from pathlib import Path
+from tqdm.auto import tqdm
 
 from model.third_party.avr_net.attention_avr_net import Attention_AVRNet
 from model.third_party.avr_net.tools.write_rttms import main as write_rttms
@@ -21,8 +22,9 @@ from .tools.contrastive_loss import ContrastiveLoss
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from torchmetrics.classification import BinaryF1Score, BinaryPrecision, BinaryRecall
+
+AHC_THRESHOLDS = [0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45]
 
 
 class Lightning_Attention_AVRNet(pl.LightningModule):
@@ -41,7 +43,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 			raise ValueError(f"loss_fn must be 'bce', 'mse' or 'contrastive' not '{args.loss_fn}'")
 
 		self.model = Attention_AVRNet(self.args.self_attention, self.args.cross_attention, dropout=self.args.self_attention_dropout)
-		self.model.freeze_relation()
+		# self.model.freeze_relation()
 
 		if 'fine_tunning' not in self.args:
 			self.args.fine_tunning = False
@@ -53,21 +55,34 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		self.train_cos_stats = {'video': [], 'audio': [], 'target': []}
 		self.val_cos_stats = {'video': [], 'audio': [], 'target': []}
 
-		self.metric = BinaryF1Score()
-		self.metric_recall = BinaryRecall()
-		self.metric_precision = BinaryPrecision()
+		self.train_f1        = BinaryF1Score()
+		self.train_recall    = BinaryRecall()
+		self.train_precision = BinaryPrecision()
+		self.val_f1          = BinaryF1Score()
+		self.val_recall      = BinaryRecall()
+		self.val_precision   = BinaryPrecision()
 
 		self.train_predictions = None
 		self.validation_predictions = None
+		self.train_eval_dataset = None  # set externally when balanced=True
 
 
 	def configure_optimizers(self):
 		print(f"CONFIGURING OPTIMIZER WITH LR: {self.args.learning_rate}")
 
 		if self.args.optimizer == 'sgd':
-			optimizer = torch.optim.SGD(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay, momentum=self.args.momentum)
+			optimizer = torch.optim.SGD(
+				self.parameters(),
+				lr=self.args.learning_rate,
+				weight_decay=self.args.weight_decay,
+				momentum=self.args.momentum
+			)
 		elif self.args.optimizer == 'adam':
-			optimizer = torch.optim.Adam(self.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
+			optimizer = torch.optim.Adam(
+				self.parameters(),
+				lr=self.args.learning_rate,
+				weight_decay=self.args.weight_decay
+			)
 		else:
 			raise ValueError(f"optimizer must be 'sgd' or 'adam' not '{self.args.optimizer}'")
 
@@ -91,11 +106,15 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		loss = self.loss_fn(scores, target)
 
 		accuracy = ((scores > 0.5) == target).float().mean()
-		fscore = self.metric(scores, target)
+		self.train_f1.update(scores, target)
+		self.train_recall.update(scores, target)
+		self.train_precision.update(scores, target)
 
-		self.log("loss/train", 		loss, 		sync_dist=True) #, on_step=True)
-		self.log("acc/train", 		accuracy, 	sync_dist=True) #, on_step=True)
-		self.log("f1_score/train", 	fscore, 	sync_dist=True) #, on_step=True)
+		self.log("loss/train",      loss,                 on_step=False, on_epoch=True, sync_dist=True)
+		self.log("acc/train",       accuracy,             on_step=False, on_epoch=True, sync_dist=True)
+		self.log("f1_score/train",  self.train_f1,        on_step=False, on_epoch=True, sync_dist=True)
+		self.log("recall/train",    self.train_recall,    on_step=False, on_epoch=True, sync_dist=True)
+		self.log("precision/train", self.train_precision, on_step=False, on_epoch=True, sync_dist=True)
 
 		for video_id, index_a, index_b, score in zip(batch['video_id'], batch['index_a'], batch['index_b'], scores):
 			self.train_predictions.append((video_id, index_a, index_b, score.detach().cpu()))
@@ -104,27 +123,38 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 
 	def on_train_epoch_end(self):
+		if self.train_eval_dataset is not None:
+			predictions = self._collect_predictions(self.train_eval_dataset)
+		else:
+			predictions = self.train_predictions
+		self.train_predictions = None
+
 		similarities = {}
 
 		for video_id in self.args.train_utterance_counts.keys():
 			similarities[video_id] = torch.diag_embed(torch.ones([self.args.train_utterance_counts[video_id]]))
 
-		for prediction in self.train_predictions:
+		for prediction in predictions:
 			video_id, index_a, index_b, score = prediction
 
 			similarities[video_id][index_a, index_b] = score
 			similarities[video_id][index_b, index_a] = score
 
-		self.train_predictions = None
-
 		similarities_path = f'{self.logger.log_dir}/similarities.pth'
 		sys_path = f'{self.logger.log_dir}/train_{self.current_epoch}/rttms'
 
-		similarity_data = {'similarities': similarities, 'starts': self.args.train_starts, 'ends': self.args.train_ends}
-		save_data(similarity_data, similarities_path, verbose=True, override=True)
-		write_rttms(similarities_path=similarities_path, sys_path=sys_path, data_type='train', ahc_threshold=self.args.ahc_threshold)
+		similarity_data = {
+			'similarities': similarities,
+			'starts': self.args.train_starts,
+			'ends': self.args.train_ends
+		}
 
-		score_avd(data_type='train', sys_path=f'{sys_path}/train.out', output_path=f'{sys_path}/train_scores.out', ref_path=self.args.train_ref_out)
+		save_data(similarity_data, similarities_path, verbose=True, override=True)
+		write_rttms(similarities_path=similarities_path, sys_path=sys_path, data_type='train',
+			  ahc_threshold=self.args.ahc_threshold)
+
+		score_avd(data_type='train', sys_path=f'{sys_path}/train.out', output_path=f'{sys_path}/train_scores.out',
+			ref_path=self.args.train_ref_out)
 
 		with open(f'{sys_path}/train_scores.out', 'r') as file:
 			scores = file.read()
@@ -133,7 +163,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		der = float(last_line.split()[3])
 
 		self.log("der/train", der, 	sync_dist=True)
-		# shutil.rmtree(sys_path)
+		shutil.rmtree(sys_path)
 		os.remove(similarities_path)
 
 
@@ -148,16 +178,16 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 		loss = self.loss_fn(scores, target)
 
-		accuracy = 	((scores > 0.5) == target).float().mean()
-		fscore = 	self.metric(scores, target)
-		recall = 	self.metric_recall(scores, target)
-		precision = self.metric_precision(scores, target)
+		accuracy = ((scores > 0.5) == target).float().mean()
+		self.val_f1.update(scores, target)
+		self.val_recall.update(scores, target)
+		self.val_precision.update(scores, target)
 
-		self.log("loss/val", 		loss, 		sync_dist=True)
-		self.log("acc/val", 		accuracy, 	sync_dist=True)
-		self.log("f1_score/val", 	fscore, 	sync_dist=True)
-		self.log("recall/val", 		recall, 	sync_dist=True)
-		self.log("precision/val",	precision, 	sync_dist=True)
+		self.log("loss/val",        loss,               sync_dist=True)
+		self.log("acc/val",         accuracy,           sync_dist=True)
+		self.log("f1_score/val",    self.val_f1,        sync_dist=True)
+		self.log("recall/val",      self.val_recall,    sync_dist=True)
+		self.log("precision/val",   self.val_precision, sync_dist=True)
 
 		for video_id, index_a, index_b, score in zip(batch['video_id'], batch['index_a'], batch['index_b'], scores):
 			self.validation_predictions.append((video_id, index_a, index_b, score.detach().cpu()))
@@ -180,29 +210,21 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 		self.validation_predictions = None
 
-		similarities_path = f'{self.logger.log_dir}/similarities.pth'
+		similarity_data = {'similarities': similarities, 'starts': self.args.val_starts, 'ends': self.args.val_ends}
 		sys_path = f'{self.logger.log_dir}/val_{self.current_epoch}/rttms'
 
-		similarity_data = {'similarities': similarities, 'starts': self.args.val_starts, 'ends': self.args.val_ends}
-		save_data(similarity_data, similarities_path, verbose=True, override=True)
-		write_rttms(similarities_path=similarities_path, sys_path=sys_path, data_type='val', ahc_threshold=self.args.ahc_threshold)
-
-		score_avd(data_type='val', sys_path=f'{sys_path}/val.out', output_path=f'{sys_path}/val_scores.out', ref_path=self.args.val_ref_out)
-
-		with open(f'{sys_path}/val_scores.out', 'r') as file:
-			scores = file.read()
-
-		last_line = scores.split('\n')[-1]
-		der = float(last_line.split()[3])
-
-		self.log("der/val", der, 	sync_dist=True)
-		# shutil.rmtree(sys_path)
-		os.remove(similarities_path)
+		best_der = self._score_ahc_sweep(
+			similarity_data=similarity_data,
+			similarities_path=f'{self.logger.log_dir}/similarities.pth',
+			base_sys_path=sys_path,
+			data_type='val',
+			ref_path=self.args.val_ref_out,
+		)
+		self.log("der/val", best_der, sync_dist=True)
 
 
 	def on_test_epoch_start(self):
 		self.validation_predictions = []
-		# self.val_cos_stats = {'video': [], 'audio': [], 'target': []}
 
 
 	def test_step(self, batch, batch_idx):
@@ -211,16 +233,16 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 		loss = self.loss_fn(scores, target)
 
-		accuracy = 	((scores > 0.5) == target).float().mean()
-		fscore = 	self.metric(scores, target)
-		recall = 	self.metric_recall(scores, target)
-		precision = self.metric_precision(scores, target)
+		accuracy = ((scores > 0.5) == target).float().mean()
+		self.val_f1.update(scores, target)
+		self.val_recall.update(scores, target)
+		self.val_precision.update(scores, target)
 
-		self.log("loss/test", 		loss, 		sync_dist=True)
-		self.log("acc/test", 		accuracy, 	sync_dist=True)
-		self.log("f1_score/test", 	fscore, 	sync_dist=True)
-		self.log("recall/test", 	recall, 	sync_dist=True)
-		self.log("precision/test", 	precision, 	sync_dist=True)
+		self.log("loss/test",       loss,               sync_dist=True)
+		self.log("acc/test",        accuracy,           sync_dist=True)
+		self.log("f1_score/test",   self.val_f1,        sync_dist=True)
+		self.log("recall/test",     self.val_recall,    sync_dist=True)
+		self.log("precision/test",  self.val_precision, sync_dist=True)
 
 		for video_id, index_a, index_b, score in zip(batch['video_id'], batch['index_a'], batch['index_b'], scores):
 			self.validation_predictions.append((video_id, index_a, index_b, score.detach().cpu()))
@@ -228,10 +250,8 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		return loss
 
 
-	# Calculate DER as part of validation end
+	# Calculate DER as part of test end
 	def on_test_epoch_end(self):
-		# self.write_cos_stats(self.val_cos_stats, 'val')
-
 		similarities = {}
 
 		for video_id in self.args.val_utterance_counts.keys():
@@ -245,24 +265,60 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 		self.validation_predictions = None
 
-		similarities_path = f'{self.logger.log_dir}/similarities_test.pth'
-		sys_path = f'{self.logger.log_dir}/rttms'
-
 		similarity_data = {'similarities': similarities, 'starts': self.args.val_starts, 'ends': self.args.val_ends}
+		best_der = self._score_ahc_sweep(
+			similarity_data=similarity_data,
+			similarities_path=f'{self.logger.log_dir}/similarities_test.pth',
+			base_sys_path=f'{self.logger.log_dir}/rttms',
+			data_type='test',
+		)
+		self.log("der/test", best_der, sync_dist=True)
+
+
+	def _collect_predictions(self, dataset):
+		loader = DataLoader(
+			dataset, batch_size=512, shuffle=False,
+			num_workers=0, collate_fn=CustomCollator(),
+		)
+		predictions = []
+		self.model.eval()
+		with torch.no_grad():
+			for batch in loader:
+				video     = batch['video'].to(self.device)
+				audio     = batch['audio'].to(self.device)
+				task_full = batch['task_full'].to(self.device)
+				scores    = self.model(video, audio, task_full)
+				for vid, ia, ib, s in zip(batch['video_id'], batch['index_a'], batch['index_b'], scores):
+					predictions.append((vid, ia, ib, s.detach().cpu()))
+		self.model.train()
+		return predictions
+
+
+	def _score_ahc_sweep(self, similarity_data, similarities_path, base_sys_path, data_type, ref_path=None):
 		save_data(similarity_data, similarities_path, verbose=True, override=True)
-		write_rttms(similarities_path=similarities_path, sys_path=sys_path, data_type='test', ahc_threshold=self.args.ahc_threshold)
+		best_der = float('inf')
+		for threshold in tqdm(AHC_THRESHOLDS, desc="Performing AHC"):
+			tag = int(threshold * 100)
+			sys_path = f'{base_sys_path}_{tag}'
+			write_rttms(similarities_path=similarities_path, sys_path=sys_path, data_type=data_type, ahc_threshold=threshold)
 
-		score_avd(data_type='test', sys_path=f'{sys_path}/test.out', output_path=f'{sys_path}/test_scores.out')
+			scores_out  = f'{sys_path}/{data_type}.out'
+			output_path = f'{sys_path}/{data_type}_scores.out'
+			if ref_path is not None:
+				score_avd(data_type=data_type, sys_path=scores_out, output_path=output_path, ref_path=ref_path)
+			else:
+				score_avd(data_type=data_type, sys_path=scores_out, output_path=output_path)
 
-		with open(f'{sys_path}/test_scores.out', 'r') as file:
-			scores = file.read()
+			with open(output_path, 'r') as file:
+				content = file.read()
+			der = float(content.strip().split('\n')[-1].split()[3])
 
-		last_line = scores.split('\n')[-1]
-		der = float(last_line.split()[3])
+			self.log(f"der/{data_type}_{tag}", der, sync_dist=True)
+			best_der = min(best_der, der)
+			shutil.rmtree(sys_path)
 
-		self.log("der/test", der, 	sync_dist=True)
-		shutil.rmtree(sys_path)
 		os.remove(similarities_path)
+		return best_der
 
 
 	def predict_step(self, batch, batch_idx, dataloader_idx=0):
@@ -340,9 +396,9 @@ def initialize_arguments(**kwargs):
 	assert Path(args.train_dataset_config['rttms_path']).exists(), 	f'Data path {args.train_dataset_config['rttms_path']} does not exist.'
 	assert Path(args.train_dataset_config['labs_path']).exists(), 	f'Data path {args.train_dataset_config['labs_path']} does not exist.'
 	assert Path(args.train_dataset_config['frames_path']).exists(), f'Data path {args.train_dataset_config['frames_path']} does not exist.'
-	assert Path(args.val_dataset_config['waves_path']).exists(), 		f'Data path {args.val_dataset_config['waves_path']} does not exist.'
-	assert Path(args.val_dataset_config['rttms_path']).exists(), 		f'Data path {args.val_dataset_config['rttms_path']} does not exist.'
-	assert Path(args.val_dataset_config['labs_path']).exists(), 		f'Data path {args.val_dataset_config['labs_path']} does not exist.'
+	assert Path(args.val_dataset_config['waves_path']).exists(), 	f'Data path {args.val_dataset_config['waves_path']} does not exist.'
+	assert Path(args.val_dataset_config['rttms_path']).exists(), 	f'Data path {args.val_dataset_config['rttms_path']} does not exist.'
+	assert Path(args.val_dataset_config['labs_path']).exists(), 	f'Data path {args.val_dataset_config['labs_path']} does not exist.'
 	assert Path(args.val_dataset_config['frames_path']).exists(), 	f'Data path {args.val_dataset_config['frames_path']} does not exist.'
 
 	args.sys_path 			= 'model/third_party/avr_net/features'
@@ -352,6 +408,22 @@ def initialize_arguments(**kwargs):
 	os.makedirs(args.checkpoint_dir, exist_ok=True)
 
 	return args
+
+
+def save_experiment_config(args, log_dir):
+	_CONFIG_PARAMS = [
+		'video_proportion', 'val_video_proportion', 'aligned', 'balanced',
+		'max_frames', 'db_video_mode', 'checkpoint', 'task',
+		'self_attention', 'self_attention_dropout', 'cross_attention', 'fine_tunning',
+		'loss_fn', 'pos_margin', 'neg_margin', 'ahc_threshold',
+		'optimizer', 'learning_rate', 'momentum', 'weight_decay',
+		'step_size', 'gamma', 'epochs', 'max_epochs', 'frozen_epochs', 'disable_pb',
+	]
+
+	config = {k: getattr(args, k) for k in _CONFIG_PARAMS if hasattr(args, k)}
+	os.makedirs(log_dir, exist_ok=True)
+	with open(os.path.join(log_dir, 'config.json'), 'w') as f:
+		json.dump(config, f, indent=2)
 
 
 def generate_filtered_ref(video_ids, data_type, output_path):
@@ -374,17 +446,25 @@ def train(args):
 	args.val_starts = eval_loader.dataset.starts()
 	args.val_ends = eval_loader.dataset.ends()
 
-	args.train_utterance_counts = train_loader.dataset.utterance_counts
-	args.train_starts = train_loader.dataset.starts()
-	args.train_ends = train_loader.dataset.ends()
+	if args.balanced:
+		train_eval_dataset = ClusteringDataset(
+			args.train_features_path, args.disable_pb,
+			video_proportion=args.video_proportion, balanced=False,
+		)
+	else:
+		train_eval_dataset = None
+
+	train_der_dataset = train_eval_dataset if train_eval_dataset is not None else train_loader.dataset
+	args.train_utterance_counts = train_der_dataset.utterance_counts
+	args.train_starts           = train_der_dataset.starts()
+	args.train_ends             = train_der_dataset.ends()
 
 	args.train_ref_out = f'{args.train_features_path}/ref_train.out'
-	generate_filtered_ref(list(train_loader.dataset.utterance_counts.keys()), 'train', args.train_ref_out)
+	generate_filtered_ref(list(train_der_dataset.utterance_counts.keys()), 'train', args.train_ref_out)
 
 	args.val_ref_out = f'{args.val_features_path}/ref_val.out'
 	generate_filtered_ref(list(eval_loader.dataset.utterance_counts.keys()), 'val', args.val_ref_out)
 
-	# TODO: Move to load_model
 	if args.checkpoint:
 		print(f'Loading checkpoint from: {args.checkpoint}')
 		model = Lightning_Attention_AVRNet(clean_up_args(args))
@@ -394,6 +474,8 @@ def train(args):
 		print('Loading default model weights')
 		model = Lightning_Attention_AVRNet(clean_up_args(args))
 
+	model.train_eval_dataset = train_eval_dataset
+
 	trainer = pl.Trainer(
 		accelerator="gpu", devices=1, strategy="auto", # auto ddp_find_unused_parameters_true ddp
 		default_root_dir=args.checkpoint_dir,
@@ -401,9 +483,10 @@ def train(args):
 		max_epochs=args.max_epochs,
 		callbacks=[
 			ModelCheckpoint(monitor="der/val", mode="min"),
-			EarlyStopping(monitor="der/val", mode="min")
 		],
 	)
+
+	save_experiment_config(args, trainer.logger.log_dir)
 
 	if args.task == 'train':
 		trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=eval_loader)
@@ -478,19 +561,6 @@ def load_data(args, mode, workers, batch_size=256):
 	)
 
 	return dataloader
-
-
-def load_model(args):
-	model = Attention_AVRNet(args.self_attention, args.cross_attention)
-	model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
-	model= nn.DataParallel(model)
-	model.to(args.device)
-	model.train()
-
-	optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
-	scheduler = StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
-
-	return model, optimizer, scheduler
 
 
 def main(**kwargs):

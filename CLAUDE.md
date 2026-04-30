@@ -127,15 +127,17 @@ Entrada: video [B, 2*N, 512, 7, 7], audio [B, 2, 256, 7, 7], task [2, B]
 
 ## Pipeline de métricas de validación (`on_validation_epoch_end`)
 
+**El DER (Diarization Error Rate) es la métrica principal. Valores más bajos son mejores. Un DER de 0 significa diarización perfecta.**
+
 1. Agrupa todas las predicciones (scores por par de utterances) en matrices de similitud por video.
 2. Guarda la matriz en `{log_dir}/similarities.pth`.
 3. **`write_rttms()`** (`tools/write_rttms.py`):
-   - Aplica **AHC clustering** (`tools/ahc_cluster.py`) con `ahc_threshold` sobre la matriz de similitud.
+   - Aplica **AHC clustering** (`tools/ahc_cluster.py`) barriendo todos los valores de `AHC_THRESHOLDS` sobre la matriz de similitud.
    - Fusiona segmentos adyacentes del mismo hablante (`merge_frames`).
    - Escribe archivos `.rttm` por video, más un listado `.out`.
 4. **`score_avd()`** (`avd/score_avd.py`):
    - Compara las RTTMs generadas contra las de ground truth usando `dscore` (DER con collar=0.25s).
-5. Loguea `der/val` → usado por `ModelCheckpoint` y `EarlyStopping`.
+5. Loguea `der/val_<N>` para cada threshold y `der/val` = mínimo del sweep → usado por `ModelCheckpoint`.
 
 ---
 
