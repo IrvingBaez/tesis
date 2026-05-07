@@ -1,6 +1,7 @@
 import argparse
 import copy
 import json
+import logging
 import os
 import shutil
 import torch
@@ -22,9 +23,10 @@ from .tools.contrastive_loss import ContrastiveLoss
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import TensorBoardLogger
 from torchmetrics.classification import BinaryF1Score, BinaryPrecision, BinaryRecall
 
-AHC_THRESHOLDS = [0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45]
+AHC_THRESHOLDS = [0.35, 0.375, 0.40, 0.425, 0.45, 0.475]
 
 
 class Lightning_Attention_AVRNet(pl.LightningModule):
@@ -68,7 +70,6 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 
 	def configure_optimizers(self):
-		print(f"CONFIGURING OPTIMIZER WITH LR: {self.args.learning_rate}")
 
 		if self.args.optimizer == 'sgd':
 			optimizer = torch.optim.SGD(
@@ -124,7 +125,10 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 	def on_train_epoch_end(self):
 		if self.train_eval_dataset is not None:
-			predictions = self._collect_predictions(self.train_eval_dataset)
+			predictions = self._collect_predictions(
+				self.train_eval_dataset,
+				desc=f'Collecting predictions [train, epoch {self.current_epoch}]',
+			)
 		else:
 			predictions = self.train_predictions
 		self.train_predictions = None
@@ -149,7 +153,8 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 			'ends': self.args.train_ends
 		}
 
-		save_data(similarity_data, similarities_path, verbose=True, override=True)
+		print(f'\nAHC [train, epoch {self.current_epoch}]', flush=True)
+		save_data(similarity_data, similarities_path, verbose=False, override=True)
 		write_rttms(similarities_path=similarities_path, sys_path=sys_path, data_type='train',
 			  ahc_threshold=self.args.ahc_threshold)
 
@@ -163,7 +168,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		der = float(last_line.split()[3])
 
 		self.log("der/train", der, 	sync_dist=True)
-		shutil.rmtree(sys_path)
+		shutil.rmtree(Path(sys_path).parent)
 		os.remove(similarities_path)
 
 
@@ -275,29 +280,32 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 		self.log("der/test", best_der, sync_dist=True)
 
 
-	def _collect_predictions(self, dataset):
+	def _collect_predictions(self, dataset, desc='Collecting predictions'):
 		loader = DataLoader(
 			dataset, batch_size=512, shuffle=False,
 			num_workers=0, collate_fn=CustomCollator(),
 		)
 		predictions = []
 		self.model.eval()
+
 		with torch.no_grad():
-			for batch in loader:
+			for batch in tqdm(loader, desc=desc):
 				video     = batch['video'].to(self.device)
 				audio     = batch['audio'].to(self.device)
 				task_full = batch['task_full'].to(self.device)
 				scores    = self.model(video, audio, task_full)
+
 				for vid, ia, ib, s in zip(batch['video_id'], batch['index_a'], batch['index_b'], scores):
 					predictions.append((vid, ia, ib, s.detach().cpu()))
+
 		self.model.train()
 		return predictions
 
 
 	def _score_ahc_sweep(self, similarity_data, similarities_path, base_sys_path, data_type, ref_path=None):
-		save_data(similarity_data, similarities_path, verbose=True, override=True)
+		save_data(similarity_data, similarities_path, verbose=False, override=True)
 		best_der = float('inf')
-		for threshold in tqdm(AHC_THRESHOLDS, desc="Performing AHC"):
+		for threshold in tqdm(AHC_THRESHOLDS, desc=f'AHC sweep [{data_type}, epoch {self.current_epoch}]'):
 			tag = int(threshold * 100)
 			sys_path = f'{base_sys_path}_{tag}'
 			write_rttms(similarities_path=similarities_path, sys_path=sys_path, data_type=data_type, ahc_threshold=threshold)
@@ -317,6 +325,7 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 			best_der = min(best_der, der)
 			shutil.rmtree(sys_path)
 
+		shutil.rmtree(Path(base_sys_path).parent)
 		os.remove(similarities_path)
 		return best_der
 
@@ -333,6 +342,15 @@ class Lightning_Attention_AVRNet(pl.LightningModule):
 
 
 def initialize_arguments(**kwargs):
+	if kwargs.get('resume_version') is not None:
+		version = kwargs['resume_version']
+		config_path = f'model/third_party/avr_net/checkpoints/lightning_logs/version_{version}/config.json'
+		print(f'\nLoading config from: {config_path}')
+		with open(config_path, 'r') as f:
+			saved_config = json.load(f)
+		_RESUME_KEYS = {'checkpoint', 'resume_version', 'max_epochs'}
+		kwargs = {**saved_config, **{k: v for k, v in kwargs.items() if k in _RESUME_KEYS}}
+
 	parser = argparse.ArgumentParser(description = "Attention AVR-Net training")
 
 	# TRAINING CONFIGURATION
@@ -343,7 +361,7 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--gamma',					type=float, default=0.5,			help='Training gamma for StepLR scheduler')
 	parser.add_argument('--video_proportion', 		type=float, default=1.0,			help='Percentage of available videos to use in training')
 	parser.add_argument('--val_video_proportion', 	type=float, default=1.0,			help='Percentage of available videos to use in validation')
-	parser.add_argument('--epochs', 				type=int, 	default=10, 			help='Epochs to add to the training of the checkpoint')
+	parser.add_argument('--min_epochs', 			type=int, 	default=10, 			help='Minimum number of epochs to train')
 	parser.add_argument('--max_epochs',				type=int, 	default=None, 			help='Force stop after this many epochs', required=False)
 	parser.add_argument('--frozen_epochs', 			type=int, 	default=0, 				help='Epochs to train without updating relation network weights')
 	parser.add_argument('--self_attention', 		type=str, 	default='',				help='Self attention method to marge available frame features')
@@ -363,6 +381,7 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--balanced',				action='store_true', 				help='Balance positives and negatives examples in training data.')
 	# MODEL CONFIGURATION
 	parser.add_argument('--checkpoint', 			type=str,		default=None, 		help='Path of checkpoint to continue training.')
+	parser.add_argument('--resume_version', 		type=int,		default=None, 		help='Logger version to resume (writes logs to the same version folder).')
 	parser.add_argument('--fine_tunning', 			action='store_true', 				help='Freezes all but the last relation layer.')
 
 	args = argparse_helper(parser, **kwargs)
@@ -417,7 +436,7 @@ def save_experiment_config(args, log_dir):
 		'self_attention', 'self_attention_dropout', 'cross_attention', 'fine_tunning',
 		'loss_fn', 'pos_margin', 'neg_margin', 'ahc_threshold',
 		'optimizer', 'learning_rate', 'momentum', 'weight_decay',
-		'step_size', 'gamma', 'epochs', 'max_epochs', 'frozen_epochs', 'disable_pb',
+		'step_size', 'gamma', 'min_epochs', 'max_epochs', 'frozen_epochs', 'disable_pb',
 	]
 
 	config = {k: getattr(args, k) for k in _CONFIG_PARAMS if hasattr(args, k)}
@@ -465,31 +484,42 @@ def train(args):
 	args.val_ref_out = f'{args.val_features_path}/ref_val.out'
 	generate_filtered_ref(list(eval_loader.dataset.utterance_counts.keys()), 'val', args.val_ref_out)
 
-	if args.checkpoint:
-		print(f'Loading checkpoint from: {args.checkpoint}')
-		model = Lightning_Attention_AVRNet(clean_up_args(args))
+	# Full resume: restore weights + optimizer + epoch counter, write to same folder.
+	# Partial load: load only weights (e.g. fine-tuning from a different run).
+	full_resume = args.checkpoint and args.resume_version is not None
+	ckpt_path = args.checkpoint if full_resume else None
+
+	model = Lightning_Attention_AVRNet(clean_up_args(args))
+	if args.checkpoint and not full_resume:
+		print(f'\nLoading checkpoint weights from: {args.checkpoint}')
 		state_dict = torch.load(args.checkpoint)['state_dict']
 		model.load_state_dict(state_dict)
+	elif full_resume:
+		print(f'\nResuming training from: {args.checkpoint} (version_{args.resume_version})')
 	else:
-		print('Loading default model weights')
-		model = Lightning_Attention_AVRNet(clean_up_args(args))
+		print('\nLoading default model weights')
 
 	model.train_eval_dataset = train_eval_dataset
 
+	logging.getLogger("lightning.pytorch").setLevel(logging.WARNING)
+
+	logger = TensorBoardLogger(save_dir=args.checkpoint_dir, version=args.resume_version)
+
 	trainer = pl.Trainer(
 		accelerator="gpu", devices=1, strategy="auto", # auto ddp_find_unused_parameters_true ddp
-		default_root_dir=args.checkpoint_dir,
-		min_epochs=args.epochs,
+		logger=logger,
+		min_epochs=args.min_epochs,
 		max_epochs=args.max_epochs,
 		callbacks=[
-			ModelCheckpoint(monitor="der/val", mode="min"),
+			ModelCheckpoint(monitor="der/val", mode="min", save_last=True),
 		],
 	)
 
 	save_experiment_config(args, trainer.logger.log_dir)
+	print()
 
 	if args.task == 'train':
-		trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=eval_loader)
+		trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=eval_loader, ckpt_path=ckpt_path)
 	elif args.task == 'val':
 		assert args.checkpoint is not None, 'Cannot eval without a given checkpoint'
 		trainer.validate(model=model, dataloaders=eval_loader)

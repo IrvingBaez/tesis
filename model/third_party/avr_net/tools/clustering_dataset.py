@@ -152,8 +152,7 @@ class ClusteringDataset(Dataset):
 		new_indices = sorted(pos_indices + neg_indices)
 		save_data(new_indices, new_indices_path)
 
-		print(f'Using {pos_count} positives and {len(neg_indices)} negatives.')
-		print(f'Database size reduced from {len(self)} to {len(new_indices)} ({(len(new_indices)/len(self))*100:.2f}%).')
+		print(f'\nBalanced: {pos_count} pos + {len(neg_indices)} neg = {len(new_indices)} pairs ({(len(new_indices)/len(self))*100:.2f}% of {len(self)})')
 
 		return new_indices
 
