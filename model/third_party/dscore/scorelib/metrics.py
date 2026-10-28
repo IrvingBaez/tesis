@@ -433,6 +433,70 @@ def der(ref_turns, sys_turns, collar=0.0, ignore_overlaps=False, uem=None):
 	NIST. (2009). The 2009 (RT-09) Rich Transcription Meeting Recognition
 	Evaluation Plan. https://web.archive.org/web/20100606041157if_/http://www.itl.nist.gov/iad/mig/tests/rt/2009/docs/rt09-meeting-eval-plan-v2.pdf
 	"""
+	if uem is None:
+		uem = gen_uem(ref_turns, sys_turns)
+	(file_ids, scored_speaker_times, miss_speaker_times, fa_speaker_times,
+	 error_speaker_times) = _run_md_eval(ref_turns, sys_turns, collar, ignore_overlaps, uem)
+	with np.errstate(invalid='ignore', divide='ignore'):
+		error_times = miss_speaker_times + fa_speaker_times + error_speaker_times
+		ders = error_times / scored_speaker_times
+	ders[np.isnan(ders)] = 0 # Numerator and denominator both 0.
+	ders[np.isinf(ders)] = 1 # Numerator > 0, but denominator = 0.
+	ders *= 100. # Convert to percent.
+
+	# Reconcile with UEM, keeping in mind that in the edge case where no
+	# reference turns are observed for a file, md-eval doesn't report results
+	# for said file.
+	file_to_der_base = dict(zip(file_ids, ders))
+	file_to_der = {}
+	for file_id in uem:
+		try:
+			der = file_to_der_base[file_id]
+		except KeyError:
+			# Check for any system turns for that file, which should be FAs,
+			# assuming that the turns have been cropped to the UEM scoring
+			# regions.
+			n_sys_turns = len(
+				[turn for turn in sys_turns if turn.file_id == file_id])
+			der = 100. if n_sys_turns else 0.0
+		file_to_der[file_id] = der
+	global_der = file_to_der_base['ALL']
+
+	return file_to_der, global_der
+
+
+def der_breakdown(ref_turns, sys_turns, collar=0.0, ignore_overlaps=False, uem=None):
+	"""Return the overall DER split into its three components.
+
+	Uses the same ``md-eval.pl`` call as ``der``, so ``miss + fa + confusion``
+	equals the global DER returned by ``der`` for the same arguments.
+
+	Returns
+	-------
+	breakdown : dict
+		Keys ``der``, ``miss``, ``fa`` and ``confusion``, all in percent of the
+		scored speaker time.
+	"""
+	if uem is None:
+		uem = gen_uem(ref_turns, sys_turns)
+	(file_ids, scored_speaker_times, miss_speaker_times, fa_speaker_times,
+	 error_speaker_times) = _run_md_eval(ref_turns, sys_turns, collar, ignore_overlaps, uem)
+
+	index = file_ids.index('ALL')
+	scored = scored_speaker_times[index]
+	if scored == 0:
+		return {'der': 0.0, 'miss': 0.0, 'fa': 0.0, 'confusion': 0.0}
+
+	miss = 100. * miss_speaker_times[index] / scored
+	fa = 100. * fa_speaker_times[index] / scored
+	confusion = 100. * error_speaker_times[index] / scored
+
+	return {'der': miss + fa + confusion, 'miss': miss, 'fa': fa, 'confusion': confusion}
+
+
+def _run_md_eval(ref_turns, sys_turns, collar, ignore_overlaps, uem):
+	"""Run ``md-eval.pl`` and return file ids with scored, missed, false alarm
+	and speaker error times per file (the global totals are under ``ALL``)."""
 	tmp_dir = tempfile.mkdtemp()
 
 	# Write RTTMs.
@@ -442,8 +506,6 @@ def der(ref_turns, sys_turns, collar=0.0, ignore_overlaps=False, uem=None):
 	write_rttm(sys_rttm_fn, sys_turns)
 
 	# Write UEM.
-	if uem is None:
-		uem = gen_uem(ref_turns, sys_turns)
 	uemf = os.path.join(tmp_dir, 'all.uem')
 	write_uem(uemf, uem)
 
@@ -477,32 +539,8 @@ def der(ref_turns, sys_turns, collar=0.0, ignore_overlaps=False, uem=None):
 		[float(m) for m in FA_SPEAKER_REO.findall(stdout)])
 	error_speaker_times = np.array(
 		[float(m) for m in ERROR_SPEAKER_REO.findall(stdout)])
-	with np.errstate(invalid='ignore', divide='ignore'):
-		error_times = miss_speaker_times + fa_speaker_times + error_speaker_times
-		ders = error_times / scored_speaker_times
-	ders[np.isnan(ders)] = 0 # Numerator and denominator both 0.
-	ders[np.isinf(ders)] = 1 # Numerator > 0, but denominator = 0.
-	ders *= 100. # Convert to percent.
 
-	# Reconcile with UEM, keeping in mind that in the edge case where no
-	# reference turns are observed for a file, md-eval doesn't report results
-	# for said file.
-	file_to_der_base = dict(zip(file_ids, ders))
-	file_to_der = {}
-	for file_id in uem:
-		try:
-			der = file_to_der_base[file_id]
-		except KeyError:
-			# Check for any system turns for that file, which should be FAs,
-			# assuming that the turns have been cropped to the UEM scoring
-			# regions.
-			n_sys_turns = len(
-				[turn for turn in sys_turns if turn.file_id == file_id])
-			der = 100. if n_sys_turns else 0.0
-		file_to_der[file_id] = der
-	global_der = file_to_der_base['ALL']
-
-	return file_to_der, global_der
+	return file_ids, scored_speaker_times, miss_speaker_times, fa_speaker_times, error_speaker_times
 
 
 def jer(file_to_ref_durs, file_to_sys_durs, file_to_cm, min_ref_dur=0):

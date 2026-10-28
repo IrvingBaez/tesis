@@ -20,6 +20,7 @@ class CustomDataset(Dataset):
 		# TODO: Implement missing_rate
 		self.missing_rate 	= 0
 		self.max_utterance_frames = config['max_frames'] if 'max_frames' in config else 5
+		self.frame_selection = config.get('frame_selection', 'first')	# 'first' or 'center' max_frames of each utterance
 
 		self.video_ids		= config['video_ids']
 		self.waves_path		= config['waves_path']
@@ -103,8 +104,12 @@ class CustomDataset(Dataset):
 
 
 	def _load_frames(self, frame_paths):
+		start = 0
+		if self.frame_selection == 'center':
+			start = max(0, (len(frame_paths) - self.max_utterance_frames) // 2)
+
 		frames = []
-		for frame_path in frame_paths[:self.max_utterance_frames]:
+		for frame_path in frame_paths[start:start + self.max_utterance_frames]:
 			frames.append(cv2.cvtColor(cv2.imread(frame_path), cv2.COLOR_BGR2RGB))
 
 		for _ in range(len(frame_paths), self.max_utterance_frames):

@@ -111,6 +111,7 @@ def initialize_arguments(**kwargs):
 	parser.add_argument('--aligned', 					action='store_true', help='Wether or not to use alined frames')
 	parser.add_argument('--max_frames', 			type=int, help='How many frames to use in self-attention')
 	parser.add_argument('--db_video_mode', 		type=str, help='Selection mode for video frames in the dataset')
+	parser.add_argument('--frame_selection', 	type=str, default='first', help="Which max_frames of each utterance are used: 'first' or 'center'")
 	parser.add_argument('--disable_pb', 			action='store_true', help='If true, hides progress bars')
 
 	args = argparse_helper(parser, **kwargs)
@@ -124,7 +125,8 @@ def initialize_arguments(**kwargs):
 		'rttms_path':		get_path('avd_path', avd_detector='ground_truth') + '/predictions',
 		'labs_path':		get_path('vad_path', vad_detector='ground_truth') + '/predictions',
 		'frames_path':	get_path('asd_path', asd_detector='ground_truth') + ('/aligned_tracklets' if args.aligned else '/tracklets'),
-		'max_frames':		args.max_frames
+		'max_frames':		args.max_frames,
+		'frame_selection':	args.frame_selection
 	}
 
 	with open(f'dataset/split/val.list', 'r') as file:
@@ -136,7 +138,8 @@ def initialize_arguments(**kwargs):
 		'rttms_path':		get_path('avd_path', avd_detector='ground_truth') + '/predictions',
 		'labs_path':		get_path('vad_path', vad_detector='ground_truth') + '/predictions',
 		'frames_path':	get_path('asd_path', asd_detector='ground_truth') + ('/aligned_tracklets' if args.aligned else '/tracklets'),
-		'max_frames':		args.max_frames
+		'max_frames':		args.max_frames,
+		'frame_selection':	args.frame_selection
 	}
 
 	with open(f'dataset/split/test.list', 'r') as file:
@@ -148,7 +151,8 @@ def initialize_arguments(**kwargs):
 		'rttms_path':		get_path('avd_path', avd_detector='ground_truth') + '/predictions',
 		'labs_path':		get_path('vad_path', vad_detector='ground_truth') + '/predictions',
 		'frames_path':	get_path('asd_path', asd_detector='ground_truth') + ('/aligned_tracklets' if args.aligned else '/tracklets'),
-		'max_frames':		args.max_frames
+		'max_frames':		args.max_frames,
+		'frame_selection':	args.frame_selection
 	}
 
 	assert Path(args.train_dataset_config['waves_path']).exists()
@@ -159,6 +163,7 @@ def initialize_arguments(**kwargs):
 	args.sys_path = 'model/third_party/avr_net/features'
 	args.features_path = f'{args.sys_path}/{args.max_frames}_frames'
 	if args.aligned: args.features_path += '_aligned'
+	if args.frame_selection != 'first': args.features_path += f'_{args.frame_selection}'
 	args.features_path += f'_{args.db_video_mode}'
 
 	args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

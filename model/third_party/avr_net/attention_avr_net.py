@@ -6,7 +6,11 @@ import model.third_party.avr_net.tools.attention as attention
 
 
 class Attention_AVRNet(nn.Module):
-	def __init__(self, self_attention, cross_attention, dropout=0.1):
+	def __init__(self, self_attention, cross_attention, dropout=0.1, relation_init=None):
+		"""
+		relation_init: path to pretrained relation layer weights (e.g. 'model/third_party/avr_net/weights/best_relation.ckpt').
+		If None, the relation layer is trained from scratch.
+		"""
 		super().__init__()
 
 		# Set cross attention
@@ -23,7 +27,7 @@ class Attention_AVRNet(nn.Module):
 		else:
 			self.cross_attention 	= attention.Concat()
 
-		self.relation_layer	= RelationLayer('model/third_party/avr_net/weights/best_relation.ckpt')
+		self.relation_layer	= RelationLayer(relation_init)
 		self.bna = nn.BatchNorm2d(256)
 		self.bna.load_state_dict(self.relation_layer.bna.state_dict())
 

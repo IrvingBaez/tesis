@@ -23,8 +23,24 @@ run.sh
 ### `run.sh`
 Activa el entorno conda `tesis`, configura variables de entorno (PYTHONPATH, CUDA, NCCL) y ejecuta `model/experiments.py`. La variable `CUDA_VISIBLE_DEVICES=0` fuerza el uso de la GPU 0.
 
-### `model/experiments.py`
-Orquestador principal del pipeline. La mayoría de las etapas están comentadas; la única activa es el entrenamiento (paso 6). Define el diccionario `train_params` y llama a `train_lightning_avd(**train_params)`.
+### `model/experiments.py` y `model/runs.py`
+`model/runs.py` registra las corridas del plan de experimentos: `BASE` tiene la configuración común y `RUNS` solo las diferencias de cada ID (E1, E2, …). `experiments.py` recibe los IDs y los ejecuta uno tras otro:
+
+```bash
+./run.sh E4 E1 E2        # corre en ese orden
+./run.sh                 # sin IDs: solo imprime la tabla resumen
+./run.sh P1 P2 P3 P4 P5  # pilotos: 10 % de train, 25 % de val, 3 épocas
+```
+
+Los pilotos (`P*` en `runs.py`) comprueban que una configuración aprende desde cero antes de lanzar las corridas completas. El primer E4 completo (SGD, lr 5e-4, sin momentum, sin barajar) se quedó en nivel de azar; está archivado en `lightning_logs/archive/`.
+
+- **Recuperación** (`model/run_summary.py::run_state`): al relanzar el mismo comando, cada corrida terminada (`done.json`) se salta; una detenida con `last.ckpt` continúa desde la última época completa (config original, mismo folder); una que murió antes de cerrar su primera época se borra y empieza de nuevo.
+- **Ctrl+C**: Lightning lo captura y regresa sin excepción; `experiments.py` revisa `trainer.interrupted` y detiene la cola.
+- Si una corrida falla con excepción, se sigue con la siguiente y al final se reportan las fallidas.
+- **Tabla resumen**: siempre se imprime al final (también tras Ctrl+C o errores) y se guarda en `lightning_logs/summary.txt`. Se arma leyendo los archivos de cada corrida, así que es completa aunque las corridas se hayan hecho en varias ejecuciones.
+- **Figuras** (`model/plots.py`): histogramas de scores, DER contra umbral del AHC y curvas por época, en PDF para la tesis (`../ThesisDoc/images/results` por defecto). Acepta IDs o carpetas de corridas: `python model/plots.py histograms E2 E3 E5`.
+
+Cada corrida escribe en `model/third_party/avr_net/checkpoints/lightning_logs/<ID>/` (TensorBoard, `config.json` con hiperparámetros y entorno, checkpoints y los resultados descritos abajo).
 
 ---
 
@@ -39,7 +55,11 @@ Orquestador principal del pipeline. La mayoría de las etapas están comentadas;
 | `balanced` | bool | Balancear pares positivos/negativos en train |
 | `max_frames` | int | Número de frames por utterance guardados en los `.pckl` de features |
 | `db_video_mode` | str | Modo de reducción de frames en extracción: `pick_first`, `pick_random`, `keep_all`, `average` |
-| `checkpoint` | str o None | Ruta a un `.ckpt` para continuar entrenamiento o evaluar |
+| `checkpoint` | str o None | Ruta a un `.ckpt` del que se cargan los pesos (o que se evalúa) |
+| `relation_init` | str o None | Pesos preentrenados de la relation layer. `None` = entrenar desde cero |
+| `run_name` | str o None | ID de la corrida; nombre de la carpeta de logs |
+| `resume` | bool | Continuar `run_name` desde su `last.ckpt` (lo decide `experiments.py`) |
+| `seed` | int | Semilla para `pl.seed_everything` |
 | `task` | str | `'train'`, `'val'`, o `'test'` |
 
 ### Arquitectura
@@ -63,8 +83,7 @@ Orquestador principal del pipeline. La mayoría de las etapas están comentadas;
 | `weight_decay` | float | Regularización L2 |
 | `step_size` | int | Pasos de época del scheduler `StepLR` |
 | `gamma` | float | Factor de decaimiento del scheduler |
-| `epochs` | int | Épocas mínimas (min_epochs en Lightning) |
-| `max_epochs` | int o None | Tope duro de épocas (si None, solo controla EarlyStopping) |
+| `epochs` | int | Número fijo de épocas (se pasa como `min_epochs` y `max_epochs` al Trainer) |
 | `frozen_epochs` | int | Épocas con la relation layer congelada al inicio |
 | `disable_pb` | bool | Ocultar barras de progreso tqdm |
 
@@ -82,13 +101,17 @@ Orquestador principal del pipeline. La mayoría de las etapas están comentadas;
 1. Llama a `create_dataset(args)` que internamente:
    - Ejecuta `feature_extraction.py::main()` (extrae features y las guarda en `.pckl` por video)
    - Crea `train_loader` (batch=64, workers=11) y `eval_loader` (batch=512, workers=2) con `ClusteringDataset`
+   - Train se baraja cada época (orden fijado por la semilla) y precarga en RAM las features de todos sus videos (`preload=True`, ~12 GB en modo `average`, ~17 GB con los workers). Sin precarga, el acceso aleatorio cargaría un `.pckl` distinto casi en cada par. Validación y test van en orden, con caché de un video
+   - `training='episodic'` (E0): `tools/episodic_dataset.py` genera de antemano, con la semilla, los episodios del AVR-Net original para todas las épocas (20 hablantes × 2 *utterances*, 400 pares *query* × *support*). Cada época tiene tantos pares como el entrenamiento balanceado, y se barajan y agrupan en *batches* de 64 como cualquier otro par; `EpochSampler` toma los de la época actual. Solo cambian los pares, no el proceso de entrenamiento
+   - `shuffle_block_videos=N` (E8, E9): para *features* que no caben en RAM, no precarga; `BlockShuffleSampler` baraja dentro de bloques de N videos y cada *worker* guarda un bloque
+   - `frame_selection='center'` (E8, E9): usa los `max_frames` frames centrales de cada *utterance* en lugar de los primeros; sus *features* van a `<max_frames>_frames_center_<modo>`
 2. Extrae `utterance_counts`, `starts`, `ends` del dataset para usar en métricas de validación.
 3. Crea `Lightning_Attention_AVRNet` con `clean_up_args(args)` (filtra args no serializables).
 4. Si hay `checkpoint`, carga `state_dict` directamente.
 5. Configura `pl.Trainer` con:
-   - `ModelCheckpoint(monitor="der/val", mode="min")`
-   - `EarlyStopping(monitor="der/val", mode="min")`
+   - `ModelCheckpoint(monitor="der/val", mode="min", save_last=True)` (no hay EarlyStopping)
 6. Ejecuta `trainer.fit()`, `trainer.validate()` o `trainer.test()` según `args.task`.
+7. Al terminar `fit`, `score_best_epoch_on_train()` calcula una sola vez el DER de train sobre todos los pares, con el checkpoint y el umbral del AHC de la mejor época de validación. Deja `train/summary.json` y `der/train`, y después escribe `done.json`. No se calcula por época porque tarda ~1 h 40 min sobre los 12.6 M pares.
 
 ---
 
@@ -118,7 +141,7 @@ Entrada: video [B, 2*N, 512, 7, 7], audio [B, 2, 256, 7, 7], task [2, B]
 - **`fusion`**: FusionCrossAttention — cross-attention bidireccional entre las dos modalidades.
 
 ### RelationLayer (`models/relation_layer.py`)
-- Pesos preentrenados cargados desde `weights/best_relation.ckpt`.
+- Se entrena desde cero salvo que se dé `relation_init` (antes cargaba siempre `weights/best_relation.ckpt`).
 - Arquitectura ResNet-like (Bottleneck ×2) + FC con sigmoid.
 - `task_token`: embedding de tamaño (4, 1536) — codifica la visibilidad del par de utterances (visible_a, visible_b → 4 combinaciones posibles).
 - Siempre se inicializa congelado; se descongela tras `frozen_epochs` épocas (a menos que `fine_tunning=True`).
@@ -137,7 +160,11 @@ Entrada: video [B, 2*N, 512, 7, 7], audio [B, 2, 256, 7, 7], task [2, B]
    - Escribe archivos `.rttm` por video, más un listado `.out`.
 4. **`score_avd()`** (`avd/score_avd.py`):
    - Compara las RTTMs generadas contra las de ground truth usando `dscore` (DER con collar=0.25s).
-5. Loguea `der/val_<N>` para cada threshold y `der/val` = mínimo del sweep → usado por `ModelCheckpoint`.
+5. Loguea `der/val_<N>` para cada threshold y `der/val` = mínimo del sweep → usado por `ModelCheckpoint`. Del mejor umbral también loguea el desglose (`der_miss/val`, `der_fa/val`, `der_confusion/val`, calculado con el mismo `md-eval-22.pl` que el DER) y el umbral (`ahc_threshold/val`).
+6. Artefactos que se conservan en `lightning_logs/<ID>/`:
+   - `val_<época>/`: `similarities.pth`, las RTTMs de todos los umbrales y `summary.json` (umbral elegido, DER, desglose, F1/precision/recall de los pares a 0.5, resultados por umbral y `epoch_seconds`). Si una época se repite al reanudar, su carpeta se sobrescribe. El *sanity check* de Lightning no deja nada.
+   - `test/` (con `task='test'`): lo mismo para test. El umbral nunca se elige en test: `der/test` y el `summary.json` usan el de la mejor época de validación de la corrida (`best_val_summary`, mismo criterio que `ModelCheckpoint`), o `ahc_threshold` si la corrida no tiene validación. Evaluar val o test no reescribe el `config.json` de entrenamiento.
+   - `done.json`: se escribe solo si `fit` terminó todas las épocas.
 
 ---
 
@@ -197,8 +224,8 @@ Splits de video IDs: `dataset/split/train.list`, `val.list`, `test.list`.
 ### Loss NaN o entrenamiento inestable
 → `tools/contrastive_loss.py`. Revisar `pos_margin` y `neg_margin` (deben cumplir `pos_margin < neg_margin`). También revisar `learning_rate` y `weight_decay`.
 
-### DER no mejora / EarlyStopping prematuro
-→ `ahc_threshold` en `on_validation_epoch_end()`. El threshold controla la granularidad del clustering; valores bajos → más clusters (sobre-segmentación), valores altos → menos (sub-segmentación). El valor original del paper era 0.14.
+### DER no mejora
+→ `ahc_threshold` en `on_validation_epoch_end()`. El threshold controla la granularidad del clustering: el AHC une clusters mientras su similitud supere el umbral, así que valores bajos → menos clusters (sub-segmentación) y valores altos → más clusters (sobre-segmentación). El valor original del paper era 0.14.
 
 ### `frozen_epochs` no tiene efecto
 → `Lightning_Attention_AVRNet::on_train_epoch_start()`. Si `fine_tunning=True`, la relation layer nunca se descongela (solo el FC final queda activo). Ambos flags son mutuamente excluyentes en la práctica.

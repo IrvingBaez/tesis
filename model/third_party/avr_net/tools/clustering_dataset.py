@@ -9,6 +9,7 @@ import numpy as np
 import random
 import pandas as pd
 import torch
+from torch.utils.data import Sampler
 from torch.utils.data.dataset import Dataset
 from tqdm.auto import tqdm, trange
 
@@ -16,7 +17,11 @@ from util import save_data
 
 
 class ClusteringDataset(Dataset):
-	def __init__(self, features_path, disable_pb=False, video_proportion=1.0, cache_size=1, balanced=False):
+	def __init__(self, features_path, disable_pb=False, video_proportion=1.0, cache_size=1, balanced=False, preload=False):
+		"""
+		preload: keeps the features of every video in memory. Needed for shuffled access, otherwise almost every
+		pair loads a different .pckl from disk. With cache_size=1, sequential access only loads each video once.
+		"""
 		super().__init__()
 
 		self.features_path = features_path
@@ -38,7 +43,7 @@ class ClusteringDataset(Dataset):
 		self.utterance_counts = OrderedDict()
 		self._video_ranges = [0]
 
-		self.cache_size = cache_size
+		self.cache_size = len(self.video_ids) if preload else cache_size
 		self.cache = OrderedDict()
 		self.cache_hits = 0.0
 		self.cache_misses = 0.0
@@ -52,6 +57,7 @@ class ClusteringDataset(Dataset):
 			self._starts[video_id]	= np.array([utterance['start'] for utterance in utterances])
 			self._ends[video_id]	= np.array([utterance['end'] for utterance in utterances])
 			self.utterance_counts[video_id] = len(utterances)
+			if preload: self.cache[video_id] = utterances
 			self._video_ranges.append(self._video_ranges[-1] + self._pairs_in_video(video_id))
 
 		self._video_ranges.pop()
@@ -178,26 +184,25 @@ class ClusteringDataset(Dataset):
 	def _retrive_item(self, video_id, i, j):
 		utterances = self._hit_cache(video_id)
 
-		video_features = torch.cat((utterances[i]['video_features'], utterances[j]['video_features']))
-		audio_features = torch.cat((utterances[i]['audio_features'], utterances[j]['audio_features']))
+		return pair_item(video_id, i, j, utterances[i], utterances[j], utterances[i]['target'] == utterances[j]['target'])
 
-		visible_a = int(utterances[i]['visible'])
-		visible_b = int(utterances[j]['visible'])
 
-		task_1 = 2 * visible_a + visible_b
-		task_2 = 2 * visible_b + visible_a
+	def video_of_indices(self):
+		"""Position in self.video_ids of the video of every index of the dataset (after balancing)."""
+		indices = np.array(self.balanced_indices) if self.balanced and self.balanced_indices else np.arange(len(self))
 
-		item = {
-			'video_id': video_id,
-			'index_a': torch.LongTensor([i]),
-			'index_b': torch.LongTensor([j]),
-			'video': video_features,
-			'audio': audio_features,
-			'task_full': [task_1, task_2],
-			'target': torch.FloatTensor([utterances[i]['target'] == utterances[j]['target']])
-		}
+		return np.searchsorted(np.array(self._video_ranges), indices, side='right') - 1
 
-		return item
+
+	def positive_pairs(self):
+		"""Number of same-speaker pairs. Balanced training sees all of them plus the same number of negatives."""
+		total = 0
+		for video_id in self.video_ids:
+			targets = torch.stack([utterance['target'].flatten()[0] for utterance in self._hit_cache(video_id)])
+			counts = torch.unique(targets, return_counts=True)[1]
+			total += int((counts * (counts - 1) // 2).sum())
+
+		return total
 
 
 	def _dict_features_to_items(self, video_id):
@@ -226,3 +231,49 @@ class ClusteringDataset(Dataset):
 			})
 
 		return video_features
+
+
+def pair_item(video_id, index_a, index_b, utterance_a, utterance_b, same_speaker):
+	visible_a = int(utterance_a['visible'])
+	visible_b = int(utterance_b['visible'])
+
+	return {
+		'video_id': video_id,
+		'index_a': torch.LongTensor([index_a]),
+		'index_b': torch.LongTensor([index_b]),
+		'video': torch.cat((utterance_a['video_features'], utterance_b['video_features'])),
+		'audio': torch.cat((utterance_a['audio_features'], utterance_b['audio_features'])),
+		'task_full': [2 * visible_a + visible_b, 2 * visible_b + visible_a],
+		'target': torch.FloatTensor([same_speaker])
+	}
+
+
+class BlockShuffleSampler(Sampler):
+	"""
+	Shuffles the pairs when the features do not fit in memory (keep_all). Every epoch the videos are shuffled and
+	split into blocks of block_videos videos, and the pairs of each block are shuffled together. Each worker only
+	keeps one block in memory (cache_size=block_videos). The order depends on the seed and the epoch.
+	"""
+	def __init__(self, dataset, block_videos, seed):
+		self.video_of_index = dataset.video_of_indices()
+		self.num_videos = len(dataset.video_ids)
+		self.block_videos = block_videos
+		self.seed = seed
+		self.epoch = 0
+
+
+	def set_epoch(self, epoch):
+		self.epoch = epoch
+
+
+	def __len__(self):
+		return len(self.video_of_index)
+
+
+	def __iter__(self):
+		generator = torch.Generator().manual_seed(self.seed + self.epoch)
+		videos = torch.randperm(self.num_videos, generator=generator).numpy()
+
+		for start in range(0, self.num_videos, self.block_videos):
+			indices = np.flatnonzero(np.isin(self.video_of_index, videos[start:start + self.block_videos]))
+			yield from indices[torch.randperm(len(indices), generator=generator).numpy()].tolist()

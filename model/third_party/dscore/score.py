@@ -70,6 +70,7 @@ table formats plus example outputs, consult the documentation for the
 from __future__ import print_function
 from __future__ import unicode_literals
 import argparse
+import json
 import os
 import sys
 
@@ -80,6 +81,7 @@ from .scorelib import __version__ as VERSION
 from .scorelib.argparse import ArgumentParser
 from .scorelib.rttm import load_rttm
 from .scorelib.turn import merge_turns, trim_turns
+from .scorelib.metrics import der_breakdown
 from .scorelib.score import score
 from .scorelib.six import iterkeys
 from .scorelib.uem import gen_uem, load_uem
@@ -257,6 +259,14 @@ def perform_scoring(args):
 	print_table(
 		file_scores, global_scores, args.output_path, args.n_digits, args.table_format)
 
+	# DER split into missed speech, false alarm and speaker confusion
+	if args.breakdown_path is not None:
+		breakdown = der_breakdown(
+			ref_turns, sys_turns, collar=args.collar,
+			ignore_overlaps=args.ignore_overlaps, uem=uem)
+		with open(args.breakdown_path, 'w') as file:
+			json.dump(breakdown, file, indent=2)
+
 
 def initialize_arguments(**kwargs):
 	parser = ArgumentParser(
@@ -306,6 +316,10 @@ def initialize_arguments(**kwargs):
 		'--output_path', nargs=None, dest='output_path', default=None,
 		metavar='STR',
 		help='Path to store output as file')
+	parser.add_argument(
+		'--breakdown_path', nargs=None, dest='breakdown_path', default=None,
+		metavar='STR',
+		help='Path to store the DER breakdown (miss, fa, confusion) as JSON')
 	parser.add_argument(
 		'--version', action='version',
 		version='%(prog)s ' + VERSION)

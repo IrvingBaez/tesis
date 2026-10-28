@@ -20,5 +20,5 @@ export MASTER_PORT='12355'
 export TORCH_NCCL_BLOCKING_WAIT=1
 export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
 
-python3 model/experiments.py || spd-say 'Experiments failed'
+python3 model/experiments.py "$@" || spd-say 'Experiments failed'
 spd-say 'Finished running experiments'

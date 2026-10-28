@@ -174,7 +174,8 @@ def load_data(args, mode, batch_size=256):
 
 
 def load_model(args):
-	model = Attention_AVRNet(args.self_attention, args.cross_attention, dropout=args.self_attention_dropout)
+	model = Attention_AVRNet(args.self_attention, args.cross_attention, dropout=args.self_attention_dropout,
+		relation_init='model/third_party/avr_net/weights/best_relation.ckpt')
 	model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
 	model= nn.DataParallel(model)
 	model.to(args.device)

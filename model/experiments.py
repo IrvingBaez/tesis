@@ -1,3 +1,6 @@
+import argparse
+import shutil
+import traceback
 import torch
 import psutil
 import torch.multiprocessing as mp
@@ -11,6 +14,9 @@ from model.avd.perform_avd import main as perform_avd
 from model.third_party.avr_net.train import main as train_avd
 from model.third_party.avr_net.train_lightning import main as train_lightning_avd
 from model.third_party.avr_net.train_features_extraction import main as train_features_extraction
+from model.runs import RUNS, get_run
+from model.run_summary import print_summary, run_state
+from model.third_party.avr_net.train_lightning import run_dir
 # from model.asd.visualize_asd import main as visualize_asd
 # from model.denoise.denoise import main as denoise
 # from model.util import get_path
@@ -18,6 +24,14 @@ from model.third_party.avr_net.train_features_extraction import main as train_fe
 
 if __name__=='__main__':
 	# mp.set_start_method('spawn', force=True)
+
+	parser = argparse.ArgumentParser(
+		description='Runs the experiments registered in model/runs.py, one after another. Finished runs are skipped '
+			'and stopped runs continue from their last checkpoint. Without run IDs, only prints the summary table.')
+	parser.add_argument('runs', nargs='*', help=f'Run IDs to execute in order. Available: {", ".join(RUNS)}')
+	cli = parser.parse_args()
+
+	for run_id in cli.runs: get_run(run_id)  # Fail early on unknown IDs
 
 	data_type = 'val'
 
@@ -81,50 +95,41 @@ if __name__=='__main__':
 	print('\n\n6- Data Base Exploration')
 	# train_features_extraction(disable_pb=True, aligned=False)
 
-	train_lightning_avd(
-		checkpoint    = 'model/third_party/avr_net/checkpoints/lightning_logs/version_8/checkpoints/last.ckpt',
-		resume_version= 8,
-		max_epochs    = 15,
-	)
-
-
 	print('\n\n6- TRAINING AUDIO VISUAL DIARIZATION')
-	train_params = {
-		# Data config
-		'video_proportion': 		1.0,
-		'val_video_proportion':		1.0,
-		'aligned': 					False,
-		'balanced':					True,
-		'max_frames': 				60,
-		'db_video_mode': 			'average',	# 'pick_first' 'pick_random' 'keep_all' 'average'
-		'task':						'train',		# 'train' 'val' 'test'
-		'checkpoint': 				'model/third_party/avr_net/old_checkpoints/lightning_logs/version_1191369/checkpoints/epoch=8-step=2196918.ckpt',
-		'resume_version':			None,
+	failed = []
 
-		# Architecture
-		'self_attention': 			'pick_first', 	# 'class_token', 'temporal', 'pick_first',
-		'self_attention_dropout':	0.2,
-		'cross_attention':	 		'concat', 		# 'fusion' 'concat'
-		'fine_tunning':				False,
+	try:
+		for run_id in cli.runs:
+			state = run_state(run_id)
+			print(f'\n\n======================== RUN {run_id} ({state}) ========================')
 
-		# Hyperparams
-		'loss_fn':					'contrastive',	# 'bce' 'mse' 'contrastive'
-		'pos_margin':				0.40,			# [0.0 - 0.5] Punishes false negatives, better recall
-		'neg_margin':				0.80, 			# [0.5 - 1.0] Punishes false positives, better precision
-		'ahc_threshold':			0.40,			# Default: 0.3, original: 0.14
-		'optimizer':				'sgd', 			# 'sgd' 'adam'
-		'learning_rate': 			5e-4,
-		'momentum': 				0.0,
-		'weight_decay': 			1e-4,
-		'step_size': 				1,
-		'gamma': 					0.99,
-		'min_epochs': 				1,
-		'max_epochs':				10,
-		'frozen_epochs': 			0,
-		'disable_pb': 				False,
-	}
+			if state == 'done':
+				print(f'{run_id} already finished, skipping it.')
+				continue
 
-	train_lightning_avd(**train_params)
+			if state == 'broken':
+				print(f'{run_id} stopped before finishing its first epoch, starting it again.')
+				shutil.rmtree(run_dir(run_id))
+
+			try:
+				if state == 'resumable':
+					trainer = train_lightning_avd(run_name=run_id, resume=True)
+				else:
+					trainer = train_lightning_avd(**get_run(run_id))
+			except Exception:
+				traceback.print_exc()
+				failed.append(run_id)
+				continue
+
+			# Lightning catches Ctrl+C and returns, stop the queue instead of starting the next run
+			if trainer.interrupted:
+				print(f'\n{run_id} interrupted. Run the same command again to continue from its last checkpoint.')
+				break
+	finally:
+		print_summary()
+
+	if failed:
+		raise SystemExit(f'Failed runs: {", ".join(failed)}')
 
 	print('\n\n7- AUDIO VISUAL DIARIZATION')
 	checkpoints = [
